@@ -28,8 +28,8 @@ def get_config():
   # sampling
   sampling = config.sampling
   sampling.method = 'pc'
-  sampling.predictor = 'reverse_diffusion'
-  sampling.corrector = 'langevin'
+  sampling.predictor = 'rms_reverse_diffusion'
+  sampling.corrector = 'rms_langevin'
 
   # model
   model = config.model
@@ -55,6 +55,6 @@ def get_config():
   model.init_scale = 0.
   model.fourier_scale = 16
   model.conv_size = 3
-  model.modified_sde = False
+  model.modified_sde = True
 
   return config
