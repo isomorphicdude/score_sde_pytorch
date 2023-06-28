@@ -504,7 +504,7 @@ def shared_corrector_update_fn(x, t, sde, model, corrector,
       corrector_obj = NoneCorrector(sde, score_fn, snr, n_steps)
     else:
       corrector_obj = corrector(sde, score_fn, snr, n_steps)
-    return corrector_obj.update_fn(x, t, extra_inputs)
+    return corrector_obj.update_fn(x, t)
 
 
 
