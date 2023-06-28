@@ -349,7 +349,65 @@ class LangevinCorrector(Corrector):
       x = x_mean + torch.sqrt(step_size * 2)[:, None, None, None] * noise
 
     return x, x_mean
+  
+  
+@register_corrector(name='rms_langevin')
+class RMSLangevinCorrector(Corrector):
+  def __init__(self, sde, score_fn, snr, n_steps, extra_args=None):
+    super().__init__(sde, score_fn, snr, n_steps)
+    if not isinstance(sde, sde_lib.VPSDE) \
+        and not isinstance(sde, sde_lib.VESDE) \
+        and not isinstance(sde, sde_lib.subVPSDE):
+      raise NotImplementedError(f"SDE class {sde.__class__.__name__} not yet supported.")
+    
+    if extra_args is None:
+      raise ValueError('extra_args must be provided for RMSLangevinCorrector')
+    
+    # get additional learning rate
+    self.lr = extra_args['lr']
+    
+    # ema parameters
+    self.beta1 = extra_args['beta1']
+    self.beta3 = extra_args['beta3']
 
+  def update_fn(self, x, t, extra_inputs=None):
+    sde = self.sde
+    score_fn = self.score_fn
+    n_steps = self.n_steps
+    target_snr = self.snr
+    if isinstance(sde, sde_lib.VPSDE) or isinstance(sde, sde_lib.subVPSDE):
+      timestep = (t * (sde.N - 1) / sde.T).long()
+      alpha = sde.alphas.to(t.device)[timestep]
+    else:
+      alpha = torch.ones_like(t)
+
+    m = extra_inputs['m']
+    counter = extra_inputs['counter']
+    
+    for i in range(n_steps):
+      grad = score_fn(x, t)
+      noise = torch.randn_like(x)
+      grad_norm = torch.norm(grad.reshape(grad.shape[0], -1), dim=-1).mean()
+      noise_norm = torch.norm(noise.reshape(noise.shape[0], -1), dim=-1).mean()
+      
+      # update m
+      m = self.beta1 * m + (1 - self.beta1) * (grad ** 2)
+      
+      # adjust step size with extra learning rate
+      step_size = self.lr * (target_snr * noise_norm / grad_norm) ** 2 * 2 * alpha
+      
+      # update without noise
+      x_mean = x + step_size[:, None, None, None] * grad / torch.sqrt(m + 1e-7)
+      
+      # update with noise
+      if self.beta3 == 0:
+        x = x_mean + torch.sqrt(step_size * 2)[:, None, None, None] * noise / \
+          torch.sqrt(torch.sqrt(m + 1e-7))
+      else:
+        x = x_mean + torch.sqrt(step_size * 2)[:, None, None, None] * noise / \
+          torch.sqrt(torch.sqrt(m + 1e-7)) * (1 / self.beta3) * (1/(counter + 1))
+
+    return x, x_mean
 
 @register_corrector(name='ald')
 class AnnealedLangevinDynamics(Corrector):
