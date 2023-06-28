@@ -61,5 +61,13 @@ def get_config():
   model.init_scale = 0.
   model.fourier_scale = 16
   model.conv_size = 3
+  
+  # change device to 'mps' if on Apple Silicon
+  # import platform
+  # if platform.processor() == 'arm':
+  #   config.device = 'mps'
+  #   print('\nChanged device to mps for Apple Silicon\n')
+  # else:
+  #   print('\nUsing device in default config\n')
 
   return config
