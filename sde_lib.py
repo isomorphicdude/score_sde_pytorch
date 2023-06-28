@@ -119,7 +119,6 @@ class SDE(abc.ABC):
         """Create discretized iteration rules for the reverse diffusion sampler."""
         if not modified:
           f, G = discretize_fn(x, t)
-          
           # squared as already taken square root in the discretize_fn
           rev_f = f - G[:, None, None, None] ** 2 * score_fn(x, t) * (0.5 if self.probability_flow else 1.)
           rev_G = torch.zeros_like(G) if self.probability_flow else G
@@ -281,7 +280,7 @@ class VESDE(SDE):
     timestep = (t * (self.N - 1) / self.T).long()
     sigma = self.discrete_sigmas.to(t.device)[timestep]
     adjacent_sigma = torch.where(timestep == 0, torch.zeros_like(t),
-                                 self.discrete_sigmas[timestep - 1].to(t.device))
+                                 self.discrete_sigmas.to(t.device)[timestep - 1])
     f = torch.zeros_like(x)
     G = torch.sqrt(sigma ** 2 - adjacent_sigma ** 2)
     return f, G
