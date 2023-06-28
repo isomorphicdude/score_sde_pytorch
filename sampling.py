@@ -93,6 +93,9 @@ def get_sampling_fn(config, sde, shape, inverse_scaler, eps):
   """
 
   sampler_name = config.sampling.method
+  modified = config.sampling.modified
+  extra_args = config.sampling.extra_args
+  
   # Probability flow ODE sampling with black-box ODE solvers
   if sampler_name.lower() == 'ode':
     sampling_fn = get_ode_sampler(sde=sde,
@@ -105,18 +108,35 @@ def get_sampling_fn(config, sde, shape, inverse_scaler, eps):
   elif sampler_name.lower() == 'pc':
     predictor = get_predictor(config.sampling.predictor.lower())
     corrector = get_corrector(config.sampling.corrector.lower())
-    sampling_fn = get_pc_sampler(sde=sde,
-                                 shape=shape,
-                                 predictor=predictor,
-                                 corrector=corrector,
-                                 inverse_scaler=inverse_scaler,
-                                 snr=config.sampling.snr,
-                                 n_steps=config.sampling.n_steps_each,
-                                 probability_flow=config.sampling.probability_flow,
-                                 continuous=config.training.continuous,
-                                 denoise=config.sampling.noise_removal,
-                                 eps=eps,
-                                 device=config.device)
+    
+    if config.sampling.use_preconditioner:
+      sampling_fn = get_pc_sampler(sde=sde,
+                                  shape=shape,
+                                  predictor=predictor,
+                                  corrector=corrector,
+                                  inverse_scaler=inverse_scaler,
+                                  snr=config.sampling.snr,
+                                  n_steps=config.sampling.n_steps_each,
+                                  probability_flow=config.sampling.probability_flow,
+                                  continuous=config.training.continuous,
+                                  denoise=config.sampling.noise_removal,
+                                  eps=eps,
+                                  device=config.device,
+                                  modified_pc=modified,
+                                  extra_args=extra_args)
+    else:
+      sampling_fn = get_pc_sampler(sde=sde,
+                                  shape=shape,
+                                  predictor=predictor,
+                                  corrector=corrector,
+                                  inverse_scaler=inverse_scaler,
+                                  snr=config.sampling.snr,
+                                  n_steps=config.sampling.n_steps_each,
+                                  probability_flow=config.sampling.probability_flow,
+                                  continuous=config.training.continuous,
+                                  denoise=config.sampling.noise_removal,
+                                  eps=eps,
+                                  device=config.device)
   else:
     raise ValueError(f"Sampler name {sampler_name} unknown.")
 
@@ -198,6 +218,55 @@ class ReverseDiffusionPredictor(Predictor):
     x_mean = x - f
     x = x_mean + G[:, None, None, None] * z
     return x, x_mean
+  
+
+@register_predictor(name='rms_reverse_diffusion')
+class RMSDiffusionPredictor(Predictor):
+  def __init__(self, sde, score_fn, probability_flow=False, extra_args=None):
+    super().__init__(sde, score_fn, probability_flow)
+    if extra_args is None:
+      raise ValueError("RMSDiffusionPredictor requires extra arguments.")
+    
+    self.beta2 = extra_args['beta2']
+    self.beta4 = extra_args['beta4']
+  
+  # this is the predictor which takes input values from the corrector
+  # at the previous time step
+  def update_fn(self, x, t, extra_inputs=None):
+    """Returns 3 outputs for update step."""
+    # the of modified is set to true hence valid
+    d_forward, d_diffusion, d_sub_term, score = self.rsde.discretize(x, t)
+    
+    # the moving average of the squared gradient
+    m = extra_inputs['m']
+    counter = extra_inputs['counter']
+        
+    # update m 
+    m = self.beta2 * m + (1 - self.beta2) * (score ** 2)
+    
+    # construct f with preconditioning
+    f = d_forward - d_sub_term / torch.sqrt(m + 1e-7)
+    
+    # construct noise with preconditioning, note the double sqrt
+    if self.beta4 == 0:
+      z = torch.randn_like(x) / torch.sqrt(torch.sqrt(m + 1e-7))
+    else:
+      z = (1/self.beta4 * 1/(counter+1)) * \
+        torch.randn_like(x) / torch.sqrt(torch.sqrt(m + 1e-7))
+    
+    # update x
+    x_mean = x - f
+    
+    # update x_mean (no noise at the last step)
+    x = x_mean + d_diffusion[:, None, None, None] * z
+    
+    # update counter
+    counter += 1
+    
+    return x, x_mean, {'m': m, 'counter': counter}
+    
+    
+    
 
 
 @register_predictor(name='ancestral_sampling')
@@ -249,7 +318,7 @@ class NonePredictor(Predictor):
   def update_fn(self, x, t):
     return x, x
 
-
+  
 @register_corrector(name='langevin')
 class LangevinCorrector(Corrector):
   def __init__(self, sde, score_fn, snr, n_steps):
@@ -317,6 +386,64 @@ class AnnealedLangevinDynamics(Corrector):
       x = x_mean + noise * torch.sqrt(step_size * 2)[:, None, None, None]
 
     return x, x_mean
+  
+@register_corrector(name='rmsald')
+class RMSAnnealedLangevinDynamics(Corrector):
+  def __init__(self, sde, score_fn, snr, n_steps, extra_args=None):
+    super().__init__(sde, score_fn, snr, n_steps)
+    if not isinstance(sde, sde_lib.VPSDE) \
+        and not isinstance(sde, sde_lib.VESDE) \
+        and not isinstance(sde, sde_lib.subVPSDE):
+      raise NotImplementedError(f"SDE class {sde.__class__.__name__} not yet supported.")
+    
+    if extra_args is None:
+      raise ValueError("extra_args must be provided for RMSAnnealedLangevinDynamics")
+    
+    # get additional learning rate
+    self.lr = extra_args['lr']
+    
+    # ema parameters
+    self.beta1 = extra_args['beta1']
+    self.beta3 = extra_args['beta3']
+
+  def update_fn(self, x, t, extra_inputs=None):
+    sde = self.sde
+    score_fn = self.score_fn
+    n_steps = self.n_steps
+    target_snr = self.snr
+    if isinstance(sde, sde_lib.VPSDE) or isinstance(sde, sde_lib.subVPSDE):
+      timestep = (t * (sde.N - 1) / sde.T).long()
+      alpha = sde.alphas.to(t.device)[timestep]
+    else:
+      alpha = torch.ones_like(t)
+
+    std = self.sde.marginal_prob(x, t)[1]
+
+    # get ema of squared gradient
+    m = extra_inputs['m']
+    counter = extra_inputs['counter']
+    
+    for i in range(n_steps):
+      grad = score_fn(x, t)
+      
+      if self.beta3 ==0:
+        noise = torch.randn_like(x)
+      else:
+        noise = (1/self.beta3) * (1/(counter+1)) * torch.randn_like(x)
+      
+      # update moving average of squared gradient
+      m = self.beta3 * m + (1 - self.beta3) * (grad ** 2)
+      
+      # adjusting stepsize for RMSprop
+      step_size = ((target_snr * std) ** 2) * 2 * alpha * self.lr
+      
+      x_mean = x + step_size[:, None, None, None] * grad / torch.sqrt(m + 1e-7)
+      x = x_mean + noise * torch.sqrt(step_size * 2)[:, None, None, None] / torch.sqrt(torch.sqrt(m + 1e-7))
+
+      # update counter
+      counter += 1
+
+    return x, x_mean, {'m': m, 'counter': counter}
 
 
 @register_corrector(name='none')
@@ -330,31 +457,66 @@ class NoneCorrector(Corrector):
     return x, x
 
 
-def shared_predictor_update_fn(x, t, sde, model, predictor, probability_flow, continuous):
+def shared_predictor_update_fn(x, t, sde, model, predictor, 
+                               probability_flow, continuous,
+                               modified_pc = False,
+                               extra_args=None,
+                               extra_inputs=None):
   """A wrapper that configures and returns the update function of predictors."""
   score_fn = mutils.get_score_fn(sde, model, train=False, continuous=continuous)
-  if predictor is None:
-    # Corrector-only sampler
-    predictor_obj = NonePredictor(sde, score_fn, probability_flow)
+  
+  if modified_pc:
+    if predictor is None:
+      # Corrector-only sampler
+      predictor_obj = NonePredictor(sde, score_fn, probability_flow, extra_args)
+    else:
+      predictor_obj = predictor(sde, score_fn, probability_flow, extra_args)
+    return predictor_obj.update_fn(x, t, extra_inputs)
+  
   else:
-    predictor_obj = predictor(sde, score_fn, probability_flow)
-  return predictor_obj.update_fn(x, t)
+    # keep original
+    if predictor is None:
+      # Corrector-only sampler
+      predictor_obj = NonePredictor(sde, score_fn, probability_flow)
+    else:
+      predictor_obj = predictor(sde, score_fn, probability_flow)
+    return predictor_obj.update_fn(x, t)
 
 
-def shared_corrector_update_fn(x, t, sde, model, corrector, continuous, snr, n_steps):
+def shared_corrector_update_fn(x, t, sde, model, corrector, 
+                               continuous, snr, n_steps,
+                               modified_pc = False,
+                               extra_args=None,
+                               extra_inputs=None):
   """A wrapper tha configures and returns the update function of correctors."""
   score_fn = mutils.get_score_fn(sde, model, train=False, continuous=continuous)
-  if corrector is None:
-    # Predictor-only sampler
-    corrector_obj = NoneCorrector(sde, score_fn, snr, n_steps)
+  
+  if modified_pc:
+    if corrector is None:
+      # Predictor-only sampler
+      corrector_obj = NoneCorrector(sde, score_fn, snr, n_steps, extra_args)
+    else:
+      corrector_obj = corrector(sde, score_fn, snr, n_steps, extra_args)
+    return corrector_obj.update_fn(x, t, extra_inputs)
   else:
-    corrector_obj = corrector(sde, score_fn, snr, n_steps)
-  return corrector_obj.update_fn(x, t)
+    if corrector is None:
+      # Predictor-only sampler
+      corrector_obj = NoneCorrector(sde, score_fn, snr, n_steps)
+    else:
+      corrector_obj = corrector(sde, score_fn, snr, n_steps)
+    return corrector_obj.update_fn(x, t, extra_inputs)
 
 
-def get_pc_sampler(sde, shape, predictor, corrector, inverse_scaler, snr,
+
+
+def get_pc_sampler(sde, shape, 
+                   predictor, corrector, 
+                   inverse_scaler, 
+                   snr,
                    n_steps=1, probability_flow=False, continuous=False,
-                   denoise=True, eps=1e-3, device='cuda'):
+                   denoise=True, eps=1e-3, device='cuda',
+                   modified_pc = False,
+                   extra_args=None):
   """Create a Predictor-Corrector (PC) sampler.
 
   Args:
@@ -369,24 +531,31 @@ def get_pc_sampler(sde, shape, predictor, corrector, inverse_scaler, snr,
     continuous: `True` indicates that the score model was continuously trained.
     denoise: If `True`, add one-step denoising to the final samples.
     eps: A `float` number. The reverse-time SDE and ODE are integrated to `epsilon` to avoid numerical issues.
-    device: PyTorch device.
+    device: PyTorch device.  
+    modified_pc: If `True`, use the user-defined PC sampler.
+    extra_args: A dictionary of extra arguments to be passed to initialise the predictor and corrector.
 
   Returns:
     A sampling function that returns samples and the number of function evaluations during sampling.
   """
   # Create predictor & corrector update functions
   predictor_update_fn = functools.partial(shared_predictor_update_fn,
+                                          modified_pc = modified_pc,
+                                          extra_args=extra_args,
                                           sde=sde,
                                           predictor=predictor,
                                           probability_flow=probability_flow,
                                           continuous=continuous)
   corrector_update_fn = functools.partial(shared_corrector_update_fn,
+                                          modified_pc = modified_pc,
+                                          extra_args=extra_args,
                                           sde=sde,
                                           corrector=corrector,
                                           continuous=continuous,
                                           snr=snr,
                                           n_steps=n_steps)
 
+  # need to initialize the extra inputs
   def pc_sampler(model):
     """ The PC sampler funciton.
 
@@ -395,16 +564,33 @@ def get_pc_sampler(sde, shape, predictor, corrector, inverse_scaler, snr,
     Returns:
       Samples, number of function evaluations.
     """
+    
     with torch.no_grad():
       # Initial sample
       x = sde.prior_sampling(shape).to(device)
       timesteps = torch.linspace(sde.T, eps, sde.N, device=device)
 
-      for i in range(sde.N):
-        t = timesteps[i]
-        vec_t = torch.ones(shape[0], device=t.device) * t
-        x, x_mean = corrector_update_fn(x, vec_t, model=model)
-        x, x_mean = predictor_update_fn(x, vec_t, model=model)
+      if modified_pc:
+        # initialize the extra inputs
+        if predictor.__name__ == 'rms_reverse_diffusion':
+          extra_inputs_corr = torch.zeros_like(x)
+          extra_inputs_pred = torch.zeros_like(x)
+        # TODO: add other predictors  
+        
+        for i in range(sde.N):
+          t = timesteps[i]
+          vec_t = torch.ones(shape[0], device=t.device) * t
+          x, x_mean, extra_inputs_corr = corrector_update_fn(x, vec_t, model=model, 
+                                                        extra_inputs=extra_inputs_corr)
+          x, x_mean, extra_inputs_pred = predictor_update_fn(x, vec_t, model=model, 
+                                          extra_inputs=extra_inputs_pred)
+      else:
+        for i in range(sde.N):
+          t = timesteps[i]
+          vec_t = torch.ones(shape[0], device=t.device) * t
+          x, x_mean = corrector_update_fn(x, vec_t, model=model)
+          x, x_mean = predictor_update_fn(x, vec_t, model=model)
+                                        
 
       return inverse_scaler(x_mean if denoise else x), sde.N * (n_steps + 1)
 
