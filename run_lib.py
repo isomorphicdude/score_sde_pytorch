@@ -87,14 +87,24 @@ def train(config, workdir):
   inverse_scaler = datasets.get_data_inverse_scaler(config)
 
   # Setup SDEs
+  # the flag modified_sde is used to control whether to use the modified SDE
   if config.training.sde.lower() == 'vpsde':
-    sde = sde_lib.VPSDE(beta_min=config.model.beta_min, beta_max=config.model.beta_max, N=config.model.num_scales)
+    sde = sde_lib.VPSDE(beta_min=config.model.beta_min, 
+                        beta_max=config.model.beta_max, 
+                        N=config.model.num_scales,
+                        modified_sde=config.model.modified_sde)
     sampling_eps = 1e-3
   elif config.training.sde.lower() == 'subvpsde':
-    sde = sde_lib.subVPSDE(beta_min=config.model.beta_min, beta_max=config.model.beta_max, N=config.model.num_scales)
+    sde = sde_lib.subVPSDE(beta_min=config.model.beta_min, 
+                           beta_max=config.model.beta_max, 
+                           N=config.model.num_scales,
+                           modified_sde=config.model.modified_sde)
     sampling_eps = 1e-3
   elif config.training.sde.lower() == 'vesde':
-    sde = sde_lib.VESDE(sigma_min=config.model.sigma_min, sigma_max=config.model.sigma_max, N=config.model.num_scales)
+    sde = sde_lib.VESDE(sigma_min=config.model.sigma_min, 
+                        sigma_max=config.model.sigma_max, 
+                        N=config.model.num_scales,
+                        modfied_sde=config.model.modified_sde)
     sampling_eps = 1e-5
   else:
     raise NotImplementedError(f"SDE {config.training.sde} unknown.")
@@ -206,13 +216,19 @@ def evaluate(config,
 
   # Setup SDEs
   if config.training.sde.lower() == 'vpsde':
-    sde = sde_lib.VPSDE(beta_min=config.model.beta_min, beta_max=config.model.beta_max, N=config.model.num_scales)
+    sde = sde_lib.VPSDE(beta_min=config.model.beta_min, 
+                        beta_max=config.model.beta_max, 
+                        N=config.model.num_scales)
     sampling_eps = 1e-3
   elif config.training.sde.lower() == 'subvpsde':
-    sde = sde_lib.subVPSDE(beta_min=config.model.beta_min, beta_max=config.model.beta_max, N=config.model.num_scales)
+    sde = sde_lib.subVPSDE(beta_min=config.model.beta_min, 
+                           beta_max=config.model.beta_max, 
+                           N=config.model.num_scales)
     sampling_eps = 1e-3
   elif config.training.sde.lower() == 'vesde':
-    sde = sde_lib.VESDE(sigma_min=config.model.sigma_min, sigma_max=config.model.sigma_max, N=config.model.num_scales)
+    sde = sde_lib.VESDE(sigma_min=config.model.sigma_min, 
+                        sigma_max=config.model.sigma_max, 
+                        N=config.model.num_scales)
     sampling_eps = 1e-5
   else:
     raise NotImplementedError(f"SDE {config.training.sde} unknown.")
@@ -252,7 +268,10 @@ def evaluate(config,
     sampling_shape = (config.eval.batch_size,
                       config.data.num_channels,
                       config.data.image_size, config.data.image_size)
-    sampling_fn = sampling.get_sampling_fn(config, sde, sampling_shape, inverse_scaler, sampling_eps)
+    sampling_fn = sampling.get_sampling_fn(config, 
+                                           sde, sampling_shape, 
+                                           inverse_scaler, sampling_eps
+                                           )
 
   # Use inceptionV3 for images with resolution higher than 256.
   inceptionv3 = config.data.image_size >= 256
