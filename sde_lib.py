@@ -7,14 +7,17 @@ import numpy as np
 class SDE(abc.ABC):
   """SDE abstract class. Functions are designed for a mini-batch of inputs."""
 
-  def __init__(self, N):
+  def __init__(self, N, modified_sde=False):
     """Construct an SDE.
 
     Args:
-      N: number of discretization time steps.
+      N: number of discretization time steps.  
+      modified_sde: whether to use the modified SDE, which gives
+        alternative discretization and reverse-time SDE.
     """
     super().__init__()
     self.N = N
+    self.modified = modified_sde
 
   @property
   @abc.abstractmethod
@@ -79,6 +82,7 @@ class SDE(abc.ABC):
     T = self.T
     sde_fn = self.sde
     discretize_fn = self.discretize
+    modified = self.modified
 
     # Build the class for reverse-time SDE.
     class RSDE(self.__class__):
@@ -92,19 +96,48 @@ class SDE(abc.ABC):
 
       def sde(self, x, t):
         """Create the drift and diffusion functions for the reverse SDE/ODE."""
-        drift, diffusion = sde_fn(x, t)
-        score = score_fn(x, t)
-        drift = drift - diffusion[:, None, None, None] ** 2 * score * (0.5 if self.probability_flow else 1.)
-        # Set the diffusion function to zero for ODEs.
-        diffusion = 0. if self.probability_flow else diffusion
-        return drift, diffusion
+        if not modified:
+          drift, diffusion = sde_fn(x, t)
+          score = score_fn(x, t)
+          drift = drift - diffusion[:, None, None, None] ** 2 * score * (0.5 if self.probability_flow else 1.)
+          # Set the diffusion function to zero for ODEs.
+          diffusion = 0. if self.probability_flow else diffusion
+          return drift, diffusion
+        else:
+          forward_drift, diffusion = sde_fn(x, t)
+          score = score_fn(x, t)
+          # in addition to forward drift, we return the term subtracted from it
+          # to be used in reverse-time SDE
+          coeff = 0.5 if self.probability_flow else 1.
+          sub_term = diffusion[:, None, None, None] ** 2 * score * coeff
+          
+          # note the sub_term does not have the minus sign
+          return forward_drift, diffusion, sub_term, score
+          
 
       def discretize(self, x, t):
         """Create discretized iteration rules for the reverse diffusion sampler."""
-        f, G = discretize_fn(x, t)
-        rev_f = f - G[:, None, None, None] ** 2 * score_fn(x, t) * (0.5 if self.probability_flow else 1.)
-        rev_G = torch.zeros_like(G) if self.probability_flow else G
-        return rev_f, rev_G
+        if not modified:
+          f, G = discretize_fn(x, t)
+          
+          # squared as already taken square root in the discretize_fn
+          rev_f = f - G[:, None, None, None] ** 2 * score_fn(x, t) * (0.5 if self.probability_flow else 1.)
+          rev_G = torch.zeros_like(G) if self.probability_flow else G
+          return rev_f, rev_G
+        else:
+          # return the above three terms but discretized
+          dt = 1 / self.N
+          forward_drift, diffusion, sub_term, score = self.sde(x, t)
+          
+          # discretization
+          d_forward_drift = forward_drift * dt
+          d_diffusion = diffusion * torch.sqrt(torch.tensor(dt, device=t.device))
+          d_sub_term = sub_term * dt # does not have the minus sign
+          
+          # the score is not discretized
+          return d_forward_drift, d_diffusion, d_sub_term, score
+          
+          
 
     return RSDE()
 
