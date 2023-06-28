@@ -93,7 +93,7 @@ def get_sampling_fn(config, sde, shape, inverse_scaler, eps):
   """
 
   sampler_name = config.sampling.method
-  modified = config.sampling.modified
+  modified = config.sampling.use_preconditioner
   extra_args = config.sampling.extra_args
   
   # Probability flow ODE sampling with black-box ODE solvers
