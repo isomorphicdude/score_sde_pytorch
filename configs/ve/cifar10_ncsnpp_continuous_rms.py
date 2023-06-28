@@ -30,6 +30,13 @@ def get_config():
   sampling.method = 'pc'
   sampling.predictor = 'rms_reverse_diffusion'
   sampling.corrector = 'rms_langevin'
+  sampling.extra_args = {'lr': 0.1,
+                         'beta1': 0.999,
+                         'beta2': 0.99,
+                         'beta3': 0,
+                         'beta4': 0}
+  # sampling.n_steps_each = 2
+  sampling.use_preconditioner = True
 
   # model
   model = config.model

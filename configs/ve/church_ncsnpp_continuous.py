@@ -31,6 +31,7 @@ def get_config():
   sampling.method = 'pc'
   sampling.predictor = 'reverse_diffusion'
   sampling.corrector = 'langevin'
+  sampling.use_preconditioner = False
 
   # data
   data = config.data
@@ -61,7 +62,7 @@ def get_config():
   model.init_scale = 0.
   model.fourier_scale = 16
   model.conv_size = 3
-  
+  model.modified_sde = False
   # change device to 'mps' if on Apple Silicon
   # import platform
   # if platform.processor() == 'arm':
