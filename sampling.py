@@ -404,16 +404,9 @@ class RMSLangevinCorrector(Corrector):
       
       # check nan
       print("Debugging RMSLangevinCorrector")
-      print(m.to('cpu').numpy())
-      if torch.isnan(m).any():
-        print(counter)
-        raise ValueError("m is nan.")
-      print(x.to('cpu').numpy())
-      if torch.isnan(x).any():
-        print(counter)
-        raise ValueError("x is nan.")
       print(grad.to('cpu').numpy())
       if torch.isnan(grad).any():
+        print(f'iteration {i} in RMSLangevinCorrector')
         print(counter)
         raise ValueError("grad is nan.")
       print("End debugging RMSLangevinCorrector")
