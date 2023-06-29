@@ -61,8 +61,12 @@ def save_gif(all_samples, config, ckpt, image_dir='/images'):
                 config.data.num_channels,
             )
         )
+        
+        #TODO: improve this to have time on the image
+        sample = torch.from_numpy(sample)
 
-        image_grid = make_grid(sample, nrow=int(np.sqrt(config.eval.batch_size)))
+        image_grid = make_grid(sample, 
+                               nrow=int(np.sqrt(config.eval.batch_size)))
         # store every 10 images
         if i % 10 == 0:
             im = PIL.Image.fromarrray(image_grid)
