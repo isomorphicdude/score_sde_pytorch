@@ -61,9 +61,9 @@ def save_gif(all_samples, config, ckpt, workdir, image_dir='/images'):
         sample = sample.view(
             (
                 config.eval.batch_size,
-                config.data.image_size,
-                config.data.image_size,
                 config.data.num_channels,
+                config.data.image_size,
+                config.data.image_size
             )
         )
         
@@ -75,7 +75,7 @@ def save_gif(all_samples, config, ckpt, workdir, image_dir='/images'):
         if i % 10 == 0:
             im = Image.fromarray(image_grid.mul_(255.)
                                  .clamp_(0, 255)
-                                 .permute(0, 2, 3, 1)
+                                 .permute(1, 2, 0)
                                  .to('cpu', torch.uint8)
                                  .numpy())
             imgs.append(im)
