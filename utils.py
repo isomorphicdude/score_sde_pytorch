@@ -35,7 +35,7 @@ def save_checkpoint(ckpt_dir, state):
     torch.save(saved_state, ckpt_dir)
 
 
-def save_gif(all_samples, config, ckpt, workdir, image_dir='/images'):
+def save_gif(all_samples, config, ckpt, workdir, image_dir='images'):
     """
     Save samples as a GIF file.
     
@@ -87,13 +87,12 @@ def save_gif(all_samples, config, ckpt, workdir, image_dir='/images'):
           
         save_image(
             image_grid,
-            os.path.join(folder, f"sample_{i}.png"),
+            os.path.join(image_dir, f"sample_{i}.png"),
         )
         torch.save(
             sample,
-            os.path.join(folder, f"sample_raw_{i}.pt"),
+            os.path.join(image_dir, f"sample_raw_{i}.pt"),
         )
-
     # save gif
     imgs[0].save(
         os.path.join(workdir, "animation.gif"),
