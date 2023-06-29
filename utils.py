@@ -34,8 +34,16 @@ def save_checkpoint(ckpt_dir, state):
     torch.save(saved_state, ckpt_dir)
 
 
-def save_gif(all_samples, config, ckpt, image_dir):
-    """Save samples as a GIF file."""
+def save_gif(all_samples, config, ckpt, image_dir='/images'):
+    """
+    Save samples as a GIF file.
+    
+    Args:  
+      - all_samples: list of samples from the model
+      - config: configuration file
+      - ckpt: checkpoint number/name, string or int
+      - image_dir: directory to save the images
+    """
     imgs = []
 
     for i, sample in enumerate(
@@ -54,7 +62,7 @@ def save_gif(all_samples, config, ckpt, image_dir):
             )
         )
 
-        image_grid = make_grid(sample, nrow=torch.sqrt(config.eval.batch_size).int())
+        image_grid = make_grid(sample, nrow=np.sqrt(config.eval.batch_size).int())
         # store every 10 images
         if i % 10 == 0:
             im = PIL.Image.fromarrray(image_grid)
