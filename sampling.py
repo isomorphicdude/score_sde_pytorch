@@ -254,7 +254,7 @@ class RMSDiffusionPredictor(Predictor):
     if torch.isnan(m).any():
       print(counter)
       raise ValueError("m is nan.")
-    
+    print(x.to('cpu').numpy())
     if torch.isnan(x).any():
       print(counter)
       raise ValueError("x is nan.")
@@ -668,7 +668,9 @@ def get_pc_sampler(sde, shape,
         for i in range(sde.N):
           t = timesteps[i]
           vec_t = torch.ones(shape[0], device=t.device) * t
+          ########
           print(x.to('cpu').numpy())
+          #######
           x, x_mean, extra_inputs_corr = corrector_update_fn(x, vec_t, model=model, 
                                                         extra_inputs=extra_inputs_corr)
           x, x_mean, extra_inputs_pred = predictor_update_fn(x, vec_t, model=model, 
