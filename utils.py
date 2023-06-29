@@ -82,11 +82,11 @@ def save_gif(all_samples, config, ckpt, workdir, image_dir='/images'):
 
         save_image(
             image_grid,
-            os.path.join(image_dir, f"ckpt_{ckpt}", f"sample_{i}.png"),
+            os.path.join(workdir, image_dir, f"ckpt_{ckpt}", f"sample_{i}.png"),
         )
         torch.save(
             sample,
-            os.path.join(image_dir, f"ckpt_{ckpt}", f"sample_raw_{i}.pt"),
+            os.path.join(workdir, image_dir, f"ckpt_{ckpt}", f"sample_raw_{i}.pt"),
         )
 
     # save gif
