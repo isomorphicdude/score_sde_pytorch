@@ -70,7 +70,7 @@ def save_gif(all_samples, config, ckpt, image_dir='/images'):
                                nrow=int(np.sqrt(config.eval.batch_size)))
         # store every 10 images
         if i % 10 == 0:
-            im = Image.fromarrray(image_grid)
+            im = Image.fromarray(image_grid)
             imgs.append(im)
 
         save_image(
