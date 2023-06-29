@@ -46,6 +46,11 @@ def save_gif(all_samples, config, ckpt, workdir, image_dir='/images'):
       - workdir: working directory
       - image_dir: directory to save the images
     """
+    folder = os.path.join(workdir, image_dir, f"ckpt_{ckpt}")
+    
+    if not tf.io.gfile.exists(folder):
+        tf.io.gfile.makedirs(os.path.dirname(folder))
+        
     imgs = []
 
     for i, sample in enumerate(
