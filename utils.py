@@ -6,6 +6,7 @@ import tqdm
 import numpy as np
 from torchvision.utils import save_image, make_grid
 import PIL
+from PIL import Image
 
 
 def restore_checkpoint(ckpt_dir, state, device):
@@ -69,7 +70,7 @@ def save_gif(all_samples, config, ckpt, image_dir='/images'):
                                nrow=int(np.sqrt(config.eval.batch_size)))
         # store every 10 images
         if i % 10 == 0:
-            im = PIL.Image.fromarrray(image_grid)
+            im = Image.fromarrray(image_grid)
             imgs.append(im)
 
         save_image(
