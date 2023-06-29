@@ -62,7 +62,7 @@ def save_gif(all_samples, config, ckpt, image_dir='/images'):
             )
         )
 
-        image_grid = make_grid(sample, nrow=np.sqrt(config.eval.batch_size).int())
+        image_grid = make_grid(sample, nrow=int(np.sqrt(config.eval.batch_size)))
         # store every 10 images
         if i % 10 == 0:
             im = PIL.Image.fromarrray(image_grid)
