@@ -249,15 +249,6 @@ class RMSDiffusionPredictor(Predictor):
     # the moving average of the squared gradient
     m = extra_inputs['m']
     counter = extra_inputs['counter']
-    
-    # check nan
-    if torch.isnan(m).any():
-      print(counter)
-      raise ValueError("m is nan.")
-    print(x.to('cpu').numpy())
-    if torch.isnan(x).any():
-      print(counter)
-      raise ValueError("x is nan.")
         
     # update m 
     m = self.beta2 * m + (1 - self.beta2) * (score ** 2)
@@ -412,6 +403,7 @@ class RMSLangevinCorrector(Corrector):
       noise_norm = torch.norm(noise.reshape(noise.shape[0], -1), dim=-1).mean()
       
       # check nan
+      print("Debugging RMSLangevinCorrector")
       print(m.to('cpu').numpy())
       if torch.isnan(m).any():
         print(counter)
@@ -424,6 +416,7 @@ class RMSLangevinCorrector(Corrector):
       if torch.isnan(grad).any():
         print(counter)
         raise ValueError("grad is nan.")
+      print("End debugging RMSLangevinCorrector")
       
       # update m
       m = self.beta1 * m + (1 - self.beta1) * (grad ** 2)
