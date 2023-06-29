@@ -35,7 +35,7 @@ def save_checkpoint(ckpt_dir, state):
     torch.save(saved_state, ckpt_dir)
 
 
-def save_gif(all_samples, config, ckpt, image_dir='/images'):
+def save_gif(all_samples, config, ckpt, workdir, image_dir='/images'):
     """
     Save samples as a GIF file.
     
@@ -43,6 +43,7 @@ def save_gif(all_samples, config, ckpt, image_dir='/images'):
       - all_samples: list of samples from the model
       - config: configuration file
       - ckpt: checkpoint number/name, string or int
+      - workdir: working directory
       - image_dir: directory to save the images
     """
     imgs = []
@@ -50,13 +51,16 @@ def save_gif(all_samples, config, ckpt, image_dir='/images'):
     for i, sample in enumerate(
         tqdm.tqdm(all_samples, desc="Saving samples", colour="green")
     ):
-        sample = np.clip(
-            sample.permute(0, 2, 3, 1).cpu().numpy() * 255.0, 0, 255
-        ).astype(np.uint8)
-
-        sample = sample.reshape(
+        # sample = np.clip(
+        #     sample.permute(0, 2, 3, 1).cpu().numpy() * 255.0, 0, 255
+        # ).astype(np.uint8)
+        
+        
+      # reshape to (batch_size, image_size, image_size, num_channels)
+      # type of sample is torch.Tensor
+        sample = sample.view(
             (
-                -1,
+                config.eval.batch_size,
                 config.data.image_size,
                 config.data.image_size,
                 config.data.num_channels,
@@ -64,13 +68,16 @@ def save_gif(all_samples, config, ckpt, image_dir='/images'):
         )
         
         #TODO: improve this to have time on the image
-        sample = torch.from_numpy(sample)
-
         image_grid = make_grid(sample, 
                                nrow=int(np.sqrt(config.eval.batch_size)))
+        
         # store every 10 images
         if i % 10 == 0:
-            im = Image.fromarray(image_grid.numpy())
+            im = Image.fromarray(image_grid.mul_(255.)
+                                 .clamp_(0, 255)
+                                 .permute(0, 2, 3, 1)
+                                 .to('cpu', torch.uint8)
+                                 .numpy())
             imgs.append(im)
 
         save_image(
@@ -84,7 +91,7 @@ def save_gif(all_samples, config, ckpt, image_dir='/images'):
 
     # save gif
     imgs[0].save(
-        "animation.gif",
+        os.path.join(workdir, "animation.gif"),
         save_all=True,
         append_images=imgs[1:],
         duration=1,
