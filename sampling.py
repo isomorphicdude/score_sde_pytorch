@@ -236,7 +236,7 @@ class RMSDiffusionPredictor(Predictor):
   def update_fn(self, x, t, extra_inputs=None):
     """Returns 3 outputs for update step."""
     # the of modified is set to true hence valid
-    if self.rsde.modified:
+    if self.rsde.rsde_modified:
       raise ValueError("RMSDiffusionPredictor does not support modified SDEs.")
     else:
       raise NotImplementedError("RMSDiffusionPredictor not implemented for non-modified SDEs.")
