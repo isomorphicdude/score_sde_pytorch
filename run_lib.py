@@ -27,6 +27,7 @@ import tensorflow as tf
 import tensorflow_gan as tfgan
 import logging
 import PIL
+from PIL import Image
 
 # Keep the import below for registering all model definitions
 from models import ddpm, ncsnv2, ncsnpp
