@@ -240,6 +240,12 @@ class RMSDiffusionPredictor(Predictor):
     # modified is set to true
     self.rsde.rsde_modified = True
     
+    # debugging
+    print("RMSDiffusionPredictor update_fn called.")
+    if torch.isnan(x).any():
+      print(counter)
+      raise ValueError("NaN encountered in RMSDiffusionPredictor update_fn.")
+    
     # further check
     if not self.rsde.rsde_modified:
       raise NotImplementedError("RMSDiffusionPredictor not implemented for non-modified SDEs.")
