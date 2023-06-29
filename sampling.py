@@ -407,7 +407,9 @@ class RMSLangevinCorrector(Corrector):
         x = x_mean + torch.sqrt(step_size * 2)[:, None, None, None] * noise / \
           torch.sqrt(torch.sqrt(m + 1e-7)) * (1 / self.beta3) * (1/(counter + 1))
 
-    return x, x_mean
+      counter += 1
+      
+    return x, x_mean, {'m': m, 'counter': counter}
 
 @register_corrector(name='ald')
 class AnnealedLangevinDynamics(Corrector):
