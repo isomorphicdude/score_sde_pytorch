@@ -127,7 +127,7 @@ def get_sampling_fn(config, sde, shape, inverse_scaler, eps):
                 device=config.device,
                 modified_pc=modified,
                 extra_args=extra_args,
-                return_all=config.evaluate.make_gif
+                return_all=config.eval.make_gif
             )
         else:
             sampling_fn = get_pc_sampler(

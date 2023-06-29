@@ -535,8 +535,8 @@ def makeGIF(config, workdir, eval_folder="eval", image_dir=None):
       image_dir: The subfolder for storing images. Default to None, so under workdir
     """
     
-    if not config.evaluate.make_gif:
-      raise ValueError("config.evaluate.make_gif must be True to make GIFs.")
+    if not config.eval.make_gif:
+      raise ValueError("config.eval.make_gif must be True to make GIFs.")
 
     # Create directory to eval_folder
     eval_dir = os.path.join(workdir, eval_folder)
