@@ -97,17 +97,16 @@ class SDE(abc.ABC):
 
       def sde(self, x, t, modified=modified):
         """Create the drift and diffusion functions for the reverse SDE/ODE."""
-        if modified != self.rsde_modified:
-          raise ValueError("Custom: The reverse-time SDE/ODE has different modified setting from the forward SDE.")
+        # if modified != self.rsde_modified:
+        #   raise ValueError("Custom: The reverse-time SDE/ODE has different modified setting from the forward SDE.")
         
-        if not modified:
+        if not self.rsde_modified:
           drift, diffusion = sde_fn(x, t)
           score = score_fn(x, t)
           drift = drift - diffusion[:, None, None, None] ** 2 * score * (0.5 if self.probability_flow else 1.)
           # Set the diffusion function to zero for ODEs.
           diffusion = 0. if self.probability_flow else diffusion
-          # return drift, diffusion
-          return drift
+          return drift, diffusion
         else:
           forward_drift, diffusion = sde_fn(x, t)
           score = score_fn(x, t)
@@ -122,7 +121,7 @@ class SDE(abc.ABC):
 
       def discretize(self, x, t):
         """Create discretized iteration rules for the reverse diffusion sampler."""
-        if not modified:
+        if not self.rsde_modified:
           f, G = discretize_fn(x, t)
           # squared as already taken square root in the discretize_fn
           rev_f = f - G[:, None, None, None] ** 2 * score_fn(x, t) * (0.5 if self.probability_flow else 1.)
@@ -140,9 +139,7 @@ class SDE(abc.ABC):
           
           # the score is not discretized
           return d_forward_drift, d_diffusion, d_sub_term, score
-          
-          
-
+      
     return RSDE()
 
 
