@@ -602,18 +602,18 @@ def makeGIF(config, workdir, eval_folder="eval", image_dir=None):
             if not waiting_message_printed:
                 logging.warning("Waiting for the arrival of checkpoint_%d" % (ckpt,))
                 waiting_message_printed = True
-            time.sleep(60)
+            # time.sleep(60)
 
         # Wait for 2 additional mins in case the file exists but is not ready for reading
         ckpt_path = os.path.join(checkpoint_dir, f"checkpoint_{ckpt}.pth")
         try:
             state = restore_checkpoint(ckpt_path, state, device=config.device)
         except:
-            time.sleep(60)
+            # time.sleep(60)
             try:
                 state = restore_checkpoint(ckpt_path, state, device=config.device)
             except:
-                time.sleep(120)
+                # time.sleep(120)
                 state = restore_checkpoint(ckpt_path, state, device=config.device)
         ema.copy_to(score_model.parameters())
 
