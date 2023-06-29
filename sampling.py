@@ -630,10 +630,11 @@ def get_pc_sampler(sde, shape,
 
       if modified_pc:
         # initialize the extra inputs
-        if predictor.__name__ == 'rms_reverse_diffusion':
-          print(predictor.__name__)
-          extra_inputs_corr = torch.zeros_like(x)
-          extra_inputs_pred = torch.zeros_like(x)
+        extra_inputs_corr = {'m': torch.zeros_like(x),
+                              'counter': 0}
+        
+        extra_inputs_pred = {'m': torch.zeros_like(x),
+                              'counter': 0}
         # TODO: add other predictors  
         
         for i in range(sde.N):
