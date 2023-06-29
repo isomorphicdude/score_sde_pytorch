@@ -229,6 +229,11 @@ class RMSDiffusionPredictor(Predictor):
     
     self.beta2 = extra_args['beta2']
     self.beta4 = extra_args['beta4']
+    
+    if sde.modified:
+      raise ValueError("RMSDiffusionPredictor does not support modified SDEs.")
+    else:
+      raise NotImplementedError("RMSDiffusionPredictor is not implemented for non-modified SDEs.")
   
   # this is the predictor which takes input values from the corrector
   # at the previous time step
