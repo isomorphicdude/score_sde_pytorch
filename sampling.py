@@ -236,6 +236,10 @@ class RMSDiffusionPredictor(Predictor):
   def update_fn(self, x, t, extra_inputs=None):
     """Returns 3 outputs for update step."""
     # the of modified is set to true hence valid
+    if self.rsde.modified:
+      raise ValueError("RMSDiffusionPredictor does not support modified SDEs.")
+    else:
+      raise NotImplementedError("RMSDiffusionPredictor not implemented for non-modified SDEs.")
     d_forward, d_diffusion, d_sub_term, score = self.rsde.discretize(x, t)
     
     # the moving average of the squared gradient
