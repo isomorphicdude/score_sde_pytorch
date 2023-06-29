@@ -338,7 +338,7 @@ def evaluate(config, workdir, eval_folder="eval"):
         )
 
     # Use inceptionV3 for images with resolution higher than 256.
-    inceptionv3 = config.data.image_size >= 256
+    inceptionv3 = config.data.image_size >= 256 # bool
     inception_model = evaluation.get_inception_model(inceptionv3=inceptionv3)
 
     begin_ckpt = config.eval.begin_ckpt
@@ -358,11 +358,11 @@ def evaluate(config, workdir, eval_folder="eval"):
         try:
             state = restore_checkpoint(ckpt_path, state, device=config.device)
         except:
-            time.sleep(60)
+            time.sleep(6)
             try:
                 state = restore_checkpoint(ckpt_path, state, device=config.device)
             except:
-                time.sleep(120)
+                time.sleep(6)
                 state = restore_checkpoint(ckpt_path, state, device=config.device)
         ema.copy_to(score_model.parameters())
         # Compute the loss function on the full evaluation dataset if loss computation is enabled
