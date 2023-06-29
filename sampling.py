@@ -229,7 +229,9 @@ class RMSDiffusionPredictor(Predictor):
     
     self.beta2 = extra_args['beta2']
     self.beta4 = extra_args['beta4']
-      
+    
+    if self.beta4 > 0:
+      raise NotImplementedError("RMSDiffusionPredictor not implemented for beta4 > 0.")
   
   # this is the predictor which takes input values from the corrector
   # at the previous time step
@@ -247,6 +249,15 @@ class RMSDiffusionPredictor(Predictor):
     # the moving average of the squared gradient
     m = extra_inputs['m']
     counter = extra_inputs['counter']
+    
+    # check nan
+    if torch.isnan(m).any():
+      print(counter)
+      raise ValueError("m is nan.")
+    
+    if torch.isnan(x).any():
+      print(counter)
+      raise ValueError("x is nan.")
         
     # update m 
     m = self.beta2 * m + (1 - self.beta2) * (score ** 2)
@@ -373,9 +384,11 @@ class RMSLangevinCorrector(Corrector):
     # get additional learning rate
     self.lr = extra_args['lr']
     
-    # ema parameters
+    # parameters
     self.beta1 = extra_args['beta1']
     self.beta3 = extra_args['beta3']
+    if self.beta3 > 0:
+      raise NotImplementedError('beta3 > 0 not yet supported')
 
   def update_fn(self, x, t, extra_inputs=None):
     sde = self.sde
