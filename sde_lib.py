@@ -86,16 +86,20 @@ class SDE(abc.ABC):
 
     # Build the class for reverse-time SDE.
     class RSDE(self.__class__):
-      def __init__(self):
+      def __init__(self, modified=modified):
         self.N = N
         self.probability_flow = probability_flow
-
+        self.rsde_modified = modified
+        
       @property
       def T(self):
         return T
 
-      def sde(self, x, t):
+      def sde(self, x, t, modified=modified):
         """Create the drift and diffusion functions for the reverse SDE/ODE."""
+        if modified != self.rsde_modified:
+          raise ValueError("Custom: The reverse-time SDE/ODE has different modified setting from the forward SDE.")
+        
         if not modified:
           drift, diffusion = sde_fn(x, t)
           score = score_fn(x, t)

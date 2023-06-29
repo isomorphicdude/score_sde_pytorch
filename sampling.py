@@ -229,7 +229,8 @@ class RMSDiffusionPredictor(Predictor):
     
     self.beta2 = extra_args['beta2']
     self.beta4 = extra_args['beta4']
-    
+      
+  
   # this is the predictor which takes input values from the corrector
   # at the previous time step
   def update_fn(self, x, t, extra_inputs=None):
