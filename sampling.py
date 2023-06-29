@@ -240,12 +240,6 @@ class RMSDiffusionPredictor(Predictor):
     # modified is set to true
     self.rsde.rsde_modified = True
     
-    # debugging
-    print("RMSDiffusionPredictor update_fn called.")
-    if torch.isnan(x).any():
-      print(counter)
-      raise ValueError("NaN encountered in RMSDiffusionPredictor update_fn.")
-    
     # further check
     if not self.rsde.rsde_modified:
       raise NotImplementedError("RMSDiffusionPredictor not implemented for non-modified SDEs.")
@@ -409,13 +403,13 @@ class RMSLangevinCorrector(Corrector):
       noise_norm = torch.norm(noise.reshape(noise.shape[0], -1), dim=-1).mean()
       
       # check nan
-      print("Debugging RMSLangevinCorrector")
-      print(grad.to('cpu').numpy())
-      if torch.isnan(grad).any():
-        print(f'iteration {i} in RMSLangevinCorrector')
-        print(counter)
-        raise ValueError("grad is nan.")
-      print("End debugging RMSLangevinCorrector")
+      # print("Debugging RMSLangevinCorrector")
+      # print(grad.to('cpu').numpy())
+      # if torch.isnan(grad).any():
+      #   print(f'iteration {i} in RMSLangevinCorrector')
+      #   print(counter)
+      #   raise ValueError("grad is nan.")
+      # print("End debugging RMSLangevinCorrector")
       
       # update m
       m = self.beta1 * m + (1 - self.beta1) * (grad ** 2)
