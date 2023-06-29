@@ -97,7 +97,6 @@ class SDE(abc.ABC):
       def sde(self, x, t):
         """Create the drift and diffusion functions for the reverse SDE/ODE."""
         if not modified:
-          raise NotImplementedError
           drift, diffusion = sde_fn(x, t)
           score = score_fn(x, t)
           drift = drift - diffusion[:, None, None, None] ** 2 * score * (0.5 if self.probability_flow else 1.)
@@ -106,7 +105,6 @@ class SDE(abc.ABC):
           # return drift, diffusion
           return drift
         else:
-          raise ValueError("Not implemented")
           forward_drift, diffusion = sde_fn(x, t)
           score = score_fn(x, t)
           # in addition to forward drift, we return the term subtracted from it

@@ -535,6 +535,8 @@ def shared_predictor_update_fn(x, t, sde, model, predictor,
       # Corrector-only sampler
       predictor_obj = NonePredictor(sde, score_fn, probability_flow, extra_args)
     else:
+      if sde.modified_sde == False:
+        raise ValueError("SDE is not modified, but modified_pc is set to True")
       predictor_obj = predictor(sde, score_fn, probability_flow, extra_args)
     return predictor_obj.update_fn(x, t, extra_inputs)
   
