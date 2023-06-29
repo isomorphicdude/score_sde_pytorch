@@ -395,6 +395,7 @@ class RMSLangevinCorrector(Corrector):
     score_fn = self.score_fn
     n_steps = self.n_steps
     target_snr = self.snr
+    
     if isinstance(sde, sde_lib.VPSDE) or isinstance(sde, sde_lib.subVPSDE):
       timestep = (t * (sde.N - 1) / sde.T).long()
       alpha = sde.alphas.to(t.device)[timestep]
@@ -409,6 +410,20 @@ class RMSLangevinCorrector(Corrector):
       noise = torch.randn_like(x)
       grad_norm = torch.norm(grad.reshape(grad.shape[0], -1), dim=-1).mean()
       noise_norm = torch.norm(noise.reshape(noise.shape[0], -1), dim=-1).mean()
+      
+      # check nan
+      print(m.to('cpu').numpy())
+      if torch.isnan(m).any():
+        print(counter)
+        raise ValueError("m is nan.")
+      print(x.to('cpu').numpy())
+      if torch.isnan(x).any():
+        print(counter)
+        raise ValueError("x is nan.")
+      print(grad.to('cpu').numpy())
+      if torch.isnan(grad).any():
+        print(counter)
+        raise ValueError("grad is nan.")
       
       # update m
       m = self.beta1 * m + (1 - self.beta1) * (grad ** 2)
@@ -668,9 +683,6 @@ def get_pc_sampler(sde, shape,
         for i in range(sde.N):
           t = timesteps[i]
           vec_t = torch.ones(shape[0], device=t.device) * t
-          ########
-          print(x.to('cpu').numpy())
-          #######
           x, x_mean, extra_inputs_corr = corrector_update_fn(x, vec_t, model=model, 
                                                         extra_inputs=extra_inputs_corr)
           x, x_mean, extra_inputs_pred = predictor_update_fn(x, vec_t, model=model, 
