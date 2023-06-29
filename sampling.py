@@ -531,11 +531,11 @@ class RMSAnnealedLangevinDynamics(Corrector):
 class NoneCorrector(Corrector):
   """An empty corrector that does nothing."""
 
-  def __init__(self, sde, score_fn, snr, n_steps):
+  def __init__(self, sde, score_fn, snr, n_steps, extra_args=None):
     pass
 
-  def update_fn(self, x, t):
-    return x, x
+  def update_fn(self, x, t, extra_inputs=None):
+    return x, x, {}
 
 
 def shared_predictor_update_fn(x, t, sde, model, predictor, 
