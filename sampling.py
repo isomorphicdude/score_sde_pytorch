@@ -595,8 +595,12 @@ def get_pc_sampler(sde, shape,
                    predictor, corrector, 
                    inverse_scaler, 
                    snr,
-                   n_steps=1, probability_flow=False, continuous=False,
-                   denoise=True, eps=1e-3, device='cuda',
+                   n_steps=1, 
+                   probability_flow=False, 
+                   continuous=False,
+                   denoise=True, 
+                   eps=1e-3, 
+                   device='cuda',
                    modified_pc = False,
                    extra_args=None):
   """Create a Predictor-Corrector (PC) sampler.
@@ -664,6 +668,7 @@ def get_pc_sampler(sde, shape,
         for i in range(sde.N):
           t = timesteps[i]
           vec_t = torch.ones(shape[0], device=t.device) * t
+          print(x.to('cpu').numpy())
           x, x_mean, extra_inputs_corr = corrector_update_fn(x, vec_t, model=model, 
                                                         extra_inputs=extra_inputs_corr)
           x, x_mean, extra_inputs_pred = predictor_update_fn(x, vec_t, model=model, 
