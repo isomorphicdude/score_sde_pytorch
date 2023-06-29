@@ -106,6 +106,7 @@ class SDE(abc.ABC):
           # return drift, diffusion
           return drift
         else:
+          raise ValueError("Not implemented")
           forward_drift, diffusion = sde_fn(x, t)
           score = score_fn(x, t)
           # in addition to forward drift, we return the term subtracted from it
