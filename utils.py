@@ -4,7 +4,7 @@ import os
 import logging
 import tqdm
 import numpy as np
-from torchvision import save_image, make_grid
+from torchvision.utils import save_image, make_grid
 import PIL
 
 
