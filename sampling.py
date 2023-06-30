@@ -237,18 +237,19 @@ class RMSDiffusionPredictor(Predictor):
 
         self.beta2 = extra_args["beta2"]
         self.beta4 = extra_args["beta4"]
+        self.sde_lr = extra_args["sde_lr"]
 
-        if self.beta4 > 0:
-            raise NotImplementedError(
-                "RMSDiffusionPredictor not implemented for beta4 > 0."
-            )
+        # if self.beta4 > 0:
+        #     raise NotImplementedError(
+        #         "RMSDiffusionPredictor not implemented for beta4 > 0."
+        #     )
 
     # this is the predictor which takes input values from the corrector
     # at the previous time step
     def update_fn(self, x, t, extra_inputs=None):
         """Returns 3 outputs for update step."""
         # modified is set to true
-        self.rsde.rsde_modified = True
+        # self.rsde.rsde_modified = True
 
         # further check
         if not self.rsde.rsde_modified:
@@ -273,16 +274,16 @@ class RMSDiffusionPredictor(Predictor):
             z = torch.randn_like(x) / torch.sqrt(torch.sqrt(m + 1e-7))
         else:
             z = (
-                (1 / self.beta4 * 1 / (counter + 1))
+                torch.sqrt(1 / self.beta4 * 1 / (counter + 1))
                 * torch.randn_like(x)
                 / torch.sqrt(torch.sqrt(m + 1e-7))
             )
 
         # update x
-        x_mean = x - f
+        x_mean = x - f * self.sde_lr
 
         # update x_mean (no noise at the last step)
-        x = x_mean + d_diffusion[:, None, None, None] * z
+        x = x_mean + d_diffusion[:, None, None, None] * z * torch.sqrt(self.sde_lr)
 
         # update counter
         counter += 1
@@ -410,8 +411,8 @@ class RMSLangevinCorrector(Corrector):
         # parameters
         self.beta1 = extra_args["beta1"]
         self.beta3 = extra_args["beta3"]
-        if self.beta3 > 0:
-            raise NotImplementedError("beta3 > 0 not yet supported")
+        # if self.beta3 > 0:
+        #     raise NotImplementedError("beta3 > 0 not yet supported")
 
     def update_fn(self, x, t, extra_inputs=None):
         sde = self.sde
@@ -446,8 +447,8 @@ class RMSLangevinCorrector(Corrector):
             # update m
             m = self.beta1 * m + (1 - self.beta1) * (grad**2)
 
-            # adjust step size with extra learning rate
-            step_size = self.lr * (target_snr * noise_norm / grad_norm) ** 2 * 2 * alpha
+            # adjust step size with extra learning rate, no snr
+            step_size = self.lr * ((noise_norm / grad_norm) ** 2) * 2 * alpha
 
             # update without noise
             x_mean = x + step_size[:, None, None, None] * grad / torch.sqrt(m + 1e-7)
@@ -461,7 +462,7 @@ class RMSLangevinCorrector(Corrector):
                 x = x_mean + torch.sqrt(step_size * 2)[
                     :, None, None, None
                 ] * noise / torch.sqrt(torch.sqrt(m + 1e-7)) * (1 / self.beta3) * (
-                    1 / (counter + 1)
+                    1 / torch.sqrt(counter + 1)
                 )
 
             counter += 1
