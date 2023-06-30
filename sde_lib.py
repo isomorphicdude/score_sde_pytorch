@@ -113,7 +113,7 @@ class SDE(abc.ABC):
           # in addition to forward drift, we return the term subtracted from it
           # to be used in reverse-time SDE
           coeff = 0.5 if self.probability_flow else 1.
-          sub_term = diffusion[:, None, None, None] ** 2 * score * coeff
+          sub_term = (diffusion[:, None, None, None] ** 2) * score * coeff
           
           # note the sub_term does not have the minus sign
           return forward_drift, diffusion, sub_term, score
