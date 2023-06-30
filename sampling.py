@@ -217,15 +217,15 @@ class EulerMaruyamaPredictor(Predictor):
 
 @register_predictor(name="reverse_diffusion")
 class ReverseDiffusionPredictor(Predictor):
-    def __init__(self, sde, score_fn, probability_flow=False):
+    def __init__(self, sde, score_fn, probability_flow=False, extra_args=None):
         super().__init__(sde, score_fn, probability_flow)
 
-    def update_fn(self, x, t):
+    def update_fn(self, x, t, extra_inputs=None):
         f, G = self.rsde.discretize(x, t)
         z = torch.randn_like(x)
         x_mean = x - f
         x = x_mean + G[:, None, None, None] * z
-        return x, x_mean
+        return x, x_mean, None
 
 
 @register_predictor(name="rms_reverse_diffusion")
@@ -249,7 +249,7 @@ class RMSDiffusionPredictor(Predictor):
     def update_fn(self, x, t, extra_inputs=None):
         """Returns 3 outputs for update step."""
         # modified is set to true
-        # self.rsde.rsde_modified = True
+        self.rsde.rsde_modified = True
 
         # further check
         if not self.rsde.rsde_modified:
@@ -355,7 +355,7 @@ class NonePredictor(Predictor):
 
 @register_corrector(name="langevin")
 class LangevinCorrector(Corrector):
-    def __init__(self, sde, score_fn, snr, n_steps):
+    def __init__(self, sde, score_fn, snr, n_steps, extra_args=None):
         super().__init__(sde, score_fn, snr, n_steps)
         if (
             not isinstance(sde, sde_lib.VPSDE)
@@ -366,7 +366,7 @@ class LangevinCorrector(Corrector):
                 f"SDE class {sde.__class__.__name__} not yet supported."
             )
 
-    def update_fn(self, x, t):
+    def update_fn(self, x, t, extra_inputs=None):
         sde = self.sde
         score_fn = self.score_fn
         n_steps = self.n_steps
@@ -386,7 +386,7 @@ class LangevinCorrector(Corrector):
             x_mean = x + step_size[:, None, None, None] * grad
             x = x_mean + torch.sqrt(step_size * 2)[:, None, None, None] * noise
 
-        return x, x_mean
+        return x, x_mean, None
 
 
 @register_corrector(name="rms_langevin")
@@ -604,24 +604,24 @@ def shared_predictor_update_fn(
     """A wrapper that configures and returns the update function of predictors."""
     score_fn = mutils.get_score_fn(sde, model, train=False, continuous=continuous)
 
-    if modified_pc:
-        if predictor is None:
-            # Corrector-only sampler
-            predictor_obj = NonePredictor(sde, score_fn, probability_flow, extra_args)
-        else:
-            if sde.modified_sde == False:
-                raise ValueError("SDE is not modified, but modified_pc is set to True")
-            predictor_obj = predictor(sde, score_fn, probability_flow, extra_args)
-        return predictor_obj.update_fn(x, t, extra_inputs)
-
+    # if modified_pc:
+    if predictor is None:
+        # Corrector-only sampler
+        predictor_obj = NonePredictor(sde, score_fn, probability_flow, extra_args)
     else:
-        # keep original
-        if predictor is None:
-            # Corrector-only sampler
-            predictor_obj = NonePredictor(sde, score_fn, probability_flow)
-        else:
-            predictor_obj = predictor(sde, score_fn, probability_flow)
-        return predictor_obj.update_fn(x, t)
+        if sde.modified_sde == False:
+            raise ValueError("SDE is not modified, but modified_pc is set to True")
+        predictor_obj = predictor(sde, score_fn, probability_flow, extra_args)
+    return predictor_obj.update_fn(x, t, extra_inputs)
+
+    # else:
+        # # keep original
+        # if predictor is None:
+        #     # Corrector-only sampler
+        #     predictor_obj = NonePredictor(sde, score_fn, probability_flow)
+        # else:
+        #     predictor_obj = predictor(sde, score_fn, probability_flow)
+        # return predictor_obj.update_fn(x, t)
 
 
 def shared_corrector_update_fn(
@@ -640,20 +640,20 @@ def shared_corrector_update_fn(
     """A wrapper tha configures and returns the update function of correctors."""
     score_fn = mutils.get_score_fn(sde, model, train=False, continuous=continuous)
 
-    if modified_pc:
-        if corrector is None:
-            # Predictor-only sampler
-            corrector_obj = NoneCorrector(sde, score_fn, snr, n_steps, extra_args)
-        else:
-            corrector_obj = corrector(sde, score_fn, snr, n_steps, extra_args)
-        return corrector_obj.update_fn(x, t, extra_inputs)
+    # if modified_pc:
+    if corrector is None:
+        # Predictor-only sampler
+        corrector_obj = NoneCorrector(sde, score_fn, snr, n_steps, extra_args)
     else:
-        if corrector is None:
-            # Predictor-only sampler
-            corrector_obj = NoneCorrector(sde, score_fn, snr, n_steps)
-        else:
-            corrector_obj = corrector(sde, score_fn, snr, n_steps)
-        return corrector_obj.update_fn(x, t)
+        corrector_obj = corrector(sde, score_fn, snr, n_steps, extra_args)
+    return corrector_obj.update_fn(x, t, extra_inputs)
+    # else:
+    #     if corrector is None:
+    #         # Predictor-only sampler
+    #         corrector_obj = NoneCorrector(sde, score_fn, snr, n_steps)
+    #     else:
+    #         corrector_obj = corrector(sde, score_fn, snr, n_steps)
+    #     return corrector_obj.update_fn(x, t)
 
 
 def get_pc_sampler(
@@ -733,32 +733,32 @@ def get_pc_sampler(
             x = sde.prior_sampling(shape).to(device)
             timesteps = torch.linspace(sde.T, eps, sde.N, device=device)
 
-            if modified_pc:
-                # initialize the extra inputs
-                extra_inputs_corr = {"m": torch.zeros_like(x), "counter": 0}
+            # if modified_pc:
+            # initialize the extra inputs
+            extra_inputs_corr = {"m": torch.zeros_like(x), "counter": 0}
 
-                extra_inputs_pred = {"m": torch.zeros_like(x), "counter": 0}
-                # TODO: add other predictors
+            extra_inputs_pred = {"m": torch.zeros_like(x), "counter": 0}
+            # TODO: add other predictors
 
-                for i in range(sde.N):
-                    t = timesteps[i]
-                    vec_t = torch.ones(shape[0], device=t.device) * t
-                    x, x_mean, extra_inputs_corr = corrector_update_fn(
-                        x, vec_t, model=model, extra_inputs=extra_inputs_corr
-                    )
-                    x, x_mean, extra_inputs_pred = predictor_update_fn(
-                        x, vec_t, model=model, extra_inputs=extra_inputs_pred
-                    )
-                    if return_all:
-                        all_samples.append(inverse_scaler(x_mean if denoise else x))
-            else:
-                for i in range(sde.N):
-                    t = timesteps[i]
-                    vec_t = torch.ones(shape[0], device=t.device) * t
-                    x, x_mean = corrector_update_fn(x, vec_t, model=model)
-                    x, x_mean = predictor_update_fn(x, vec_t, model=model)
-                    if return_all:
-                        all_samples.append(inverse_scaler(x_mean if denoise else x))
+            for i in range(sde.N):
+                t = timesteps[i]
+                vec_t = torch.ones(shape[0], device=t.device) * t
+                x, x_mean, extra_inputs_corr = corrector_update_fn(
+                    x, vec_t, model=model, extra_inputs=extra_inputs_corr
+                )
+                x, x_mean, extra_inputs_pred = predictor_update_fn(
+                    x, vec_t, model=model, extra_inputs=extra_inputs_pred
+                )
+                if return_all:
+                    all_samples.append(inverse_scaler(x_mean if denoise else x))
+            # else:
+            #     for i in range(sde.N):
+            #         t = timesteps[i]
+            #         vec_t = torch.ones(shape[0], device=t.device) * t
+            #         x, x_mean = corrector_update_fn(x, vec_t, model=model)
+            #         x, x_mean = predictor_update_fn(x, vec_t, model=model)
+            #         if return_all:
+            #             all_samples.append(inverse_scaler(x_mean if denoise else x))
                         
         if return_all:
             return all_samples, sde.N * (n_steps + 1)
