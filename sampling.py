@@ -283,7 +283,7 @@ class RMSDiffusionPredictor(Predictor):
         x_mean = x - f * self.sde_lr
 
         # update x_mean (no noise at the last step)
-        x = x_mean + d_diffusion[:, None, None, None] * z * torch.sqrt(self.sde_lr)
+        x = x_mean + d_diffusion[:, None, None, None] * z * np.sqrt(self.sde_lr)
 
         # update counter
         counter += 1
