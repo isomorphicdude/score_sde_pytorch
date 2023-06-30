@@ -274,7 +274,7 @@ class RMSDiffusionPredictor(Predictor):
             z = torch.randn_like(x) / torch.sqrt(torch.sqrt(m + 1e-7))
         else:
             z = (
-                torch.sqrt(1 / self.beta4 * 1 / (counter + 1))
+                np.sqrt(1 / self.beta4 * 1 / (counter + 1))
                 * torch.randn_like(x)
                 / torch.sqrt(torch.sqrt(m + 1e-7))
             )
