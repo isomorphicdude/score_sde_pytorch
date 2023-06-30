@@ -31,6 +31,7 @@ def get_config():
   sampling.predictor = 'rms_reverse_diffusion'
   sampling.corrector = 'rms_langevin'
   sampling.extra_args = {'lr': 0.1,
+                         'sde_lr':100,
                          'beta1': 0.999,
                          'beta2': 0.99,
                          'beta3': 0,
