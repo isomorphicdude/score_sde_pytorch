@@ -362,11 +362,11 @@ class AncestralSamplingPredictor(Predictor):
 class NonePredictor(Predictor):
     """An empty predictor that does nothing."""
 
-    def __init__(self, sde, score_fn, probability_flow=False):
+    def __init__(self, sde, score_fn, probability_flow=False, extra_args=None):
         pass
 
-    def update_fn(self, x, t):
-        return x, x
+    def update_fn(self, x, t, extra_inputs=None):
+        return x, x, None
 
 
 @register_corrector(name="langevin")
