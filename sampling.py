@@ -219,12 +219,24 @@ class EulerMaruyamaPredictor(Predictor):
 class ReverseDiffusionPredictor(Predictor):
     def __init__(self, sde, score_fn, probability_flow=False, extra_args=None):
         super().__init__(sde, score_fn, probability_flow)
+        if extra_args is not None:
+            self.sde_lr = extra_args["sde_lr"]
+            self.scale_noise = extra_args["scale_noise"]
+            self.scale = True
 
     def update_fn(self, x, t, extra_inputs=None):
         f, G = self.rsde.discretize(x, t)
         z = torch.randn_like(x)
-        x_mean = x - f
-        x = x_mean + G[:, None, None, None] * z
+        
+        if self.scale:
+            x_mean = x - f * self.sde_lr
+            if self.scale_noise:
+                x = x_mean + G[:, None, None, None] * z * np.sqrt(self.sde_lr)
+                
+        else:
+            x_mean = x - f
+            x = x_mean + G[:, None, None, None] * z
+            
         return x, x_mean, None
 
 
@@ -238,6 +250,7 @@ class RMSDiffusionPredictor(Predictor):
         self.beta2 = extra_args["beta2"]
         self.beta4 = extra_args["beta4"]
         self.sde_lr = extra_args["sde_lr"]
+        self.scale_noise = extra_args["scale_noise"]
 
         # if self.beta4 > 0:
         #     raise NotImplementedError(
@@ -267,7 +280,7 @@ class RMSDiffusionPredictor(Predictor):
         m = self.beta2 * m + (1 - self.beta2) * (score**2)
 
         # construct f with preconditioning
-        f = d_forward - d_sub_term / torch.sqrt(m + 1e-7)
+        f = d_forward - self.sde_lr * d_sub_term / torch.sqrt(m + 1e-7)
 
         # construct noise with preconditioning, note the double sqrt
         if self.beta4 == 0:
@@ -280,10 +293,13 @@ class RMSDiffusionPredictor(Predictor):
             )
 
         # update x
-        x_mean = x - f * self.sde_lr
+        x_mean = x - f
 
         # update x_mean (no noise at the last step)
-        x = x_mean + d_diffusion[:, None, None, None] * z * np.sqrt(self.sde_lr)
+        if self.scale_noise:
+            x = x_mean + d_diffusion[:, None, None, None] * z * np.sqrt(self.sde_lr)
+        else:
+            x = x_mean + d_diffusion[:, None, None, None] * z
 
         # update counter
         counter += 1
