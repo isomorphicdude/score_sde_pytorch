@@ -276,7 +276,7 @@ class RMSDiffusionPredictor(Predictor):
         
         d_forward_drift, d_G = self.sde.discretize(x, t) # the G is multiplied by the sqrt
         score = self.score_fn(x, t)
-        d_sub_term = (d_G ** 2) * score
+        d_sub_term = (d_G[:, None, None, None] ** 2) * score
         
         
         # the moving average of the squared gradient
