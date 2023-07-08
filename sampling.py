@@ -251,6 +251,8 @@ class RMSDiffusionPredictor(Predictor):
         self.beta4 = extra_args["beta4"]
         self.sde_lr = extra_args["sde_lr"]
         self.scale_noise = extra_args["scale_noise"]
+        self.adam_like = extra_args["adam_like"] # whether to use adam-like update
+        self.lamb = extra_args["lamb"] # the extreme values of pre-conditioner
 
         # if self.beta4 > 0:
         #     raise NotImplementedError(
@@ -262,16 +264,21 @@ class RMSDiffusionPredictor(Predictor):
     def update_fn(self, x, t, extra_inputs=None):
         """Returns 3 outputs for update step."""
         # modified is set to true
-        self.rsde.rsde_modified = True
+        # self.rsde.rsde_modified = True
 
         # further check
-        if not self.rsde.rsde_modified:
-            raise NotImplementedError(
-                "RMSDiffusionPredictor not implemented for non-modified SDEs."
-            )
+        # if not self.rsde.rsde_modified:
+        #     raise NotImplementedError(
+        #         "RMSDiffusionPredictor not implemented for non-modified SDEs."
+        #     )
 
-        d_forward, d_diffusion, d_sub_term, score = self.rsde.discretize(x, t)
-
+        # d_forward_drift, d_diffusion, d_sub_term, score = self.rsde.discretize(x, t)
+        
+        d_forward_drift, d_G = self.sde.discretize(x, t) # the G is multiplied by the sqrt
+        score = self.score_fn(x, t)
+        d_sub_term = (d_G ** 2) * score
+        
+        
         # the moving average of the squared gradient
         m = extra_inputs["m"]
         counter = extra_inputs["counter"]
@@ -280,26 +287,39 @@ class RMSDiffusionPredictor(Predictor):
         m = self.beta2 * m + (1 - self.beta2) * (score**2)
 
         # construct f with preconditioning
-        f = d_forward - self.sde_lr * d_sub_term / torch.sqrt(m + 1e-7)
+        if self.adam_like:
+            f = d_forward_drift - d_sub_term / torch.sqrt(m + self.lamb)
+        else:
+            f = d_forward_drift - d_sub_term / (torch.sqrt(m) + self.lamb)
 
         # construct noise with preconditioning, note the double sqrt
         if self.beta4 == 0:
-            z = torch.randn_like(x) / torch.sqrt(torch.sqrt(m + 1e-7))
+            if self.adam_like:
+                z = torch.randn_like(x) / torch.sqrt(torch.sqrt(m + self.lamb))
+            else:
+                z = torch.randn_like(x) / (torch.sqrt(torch.sqrt(m) + self.lamb))
         else:
-            z = (
-                np.sqrt(1 / self.beta4 * 1 / (counter + 1))
-                * torch.randn_like(x)
-                / torch.sqrt(torch.sqrt(m + 1e-7))
-            )
+            if self.adam_like:
+                z = (
+                    np.sqrt(1 / self.beta4 * 1 / (counter + 1))
+                    * torch.randn_like(x)
+                    / torch.sqrt(torch.sqrt(m + self.lamb))
+                )
+            else:
+                z = (
+                    np.sqrt(1 / self.beta4 * 1 / (counter + 1))
+                    * torch.randn_like(x)
+                    / (torch.sqrt(torch.sqrt(m) + self.lamb))
+                )
 
         # update x
-        x_mean = x - f
+        x_mean = x - f * self.sde_lr
 
         # update x_mean (no noise at the last step)
         if self.scale_noise:
-            x = x_mean + d_diffusion[:, None, None, None] * z * np.sqrt(self.sde_lr)
+            x = x_mean + d_G[:, None, None, None] * z * np.sqrt(self.sde_lr)
         else:
-            x = x_mean + d_diffusion[:, None, None, None] * z
+            x = x_mean + d_G[:, None, None, None] * z
 
         # update counter
         counter += 1
