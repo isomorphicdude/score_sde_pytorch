@@ -345,9 +345,7 @@ class RMSDiffusionPredictor(Predictor):
     def sigmoid(self, x, scale, shift, num_steps):
         """Sigmoid function for interpolation."""
         # here x is the counter indicating the current iteration
-        return torch.where(x >= 0,
-                    1 / (1 + np.exp(-1 * scale * (x-shift) / num_steps)),
-                    np.exp(scale * (x-shift) / num_steps) / (1 + np.exp(scale * (x-shift) / num_steps)))
+        return torch.nn.Sigmoid(scale * (x-shift)/num_steps)
 
 
 @register_predictor(name="ancestral_sampling")
