@@ -248,7 +248,7 @@ class RMSDiffusionPredictor(Predictor):
             raise ValueError("RMSDiffusionPredictor requires extra arguments.")
 
         self.beta2 = extra_args["beta2"]
-        # self.beta4 = extra_args["beta4"]
+        self.beta4 = extra_args["beta4"]
         self.sde_lr = extra_args["sde_lr"]
         self.scale_noise = extra_args["scale_noise"]
         self.adam_like = extra_args["adam_like"] # whether to use adam-like update
