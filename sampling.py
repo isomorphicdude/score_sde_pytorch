@@ -281,6 +281,10 @@ class RMSDiffusionPredictor(Predictor):
 
         # d_forward_drift, d_diffusion, d_sub_term, score = self.rsde.discretize(x, t)
         
+        # the moving average of the squared gradient
+        m = extra_inputs["m"]
+        counter = extra_inputs["counter"]
+        
         d_forward_drift, d_G = self.sde.discretize(x, t) # the G is multiplied by the sqrt
         score = self.score_fn(x, t)
         d_sub_term = (d_G[:, None, None, None] ** 2) * score
@@ -294,11 +298,6 @@ class RMSDiffusionPredictor(Predictor):
             beta2 = self.min_beta + (self.max_beta-self.min_beta) * counter / self.sde.N
         else:
             beta2 = self.beta2
-        
-        
-        # the moving average of the squared gradient
-        m = extra_inputs["m"]
-        counter = extra_inputs["counter"]
 
         # update m
         m = beta2 * m + (1 - beta2) * (score**2)
