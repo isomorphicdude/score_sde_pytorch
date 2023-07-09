@@ -248,11 +248,18 @@ class RMSDiffusionPredictor(Predictor):
             raise ValueError("RMSDiffusionPredictor requires extra arguments.")
 
         self.beta2 = extra_args["beta2"]
-        self.beta4 = extra_args["beta4"]
+        # self.beta4 = extra_args["beta4"]
         self.sde_lr = extra_args["sde_lr"]
         self.scale_noise = extra_args["scale_noise"]
         self.adam_like = extra_args["adam_like"] # whether to use adam-like update
         self.lamb = extra_args["lamb"] # the extreme values of pre-conditioner
+        
+        self.interpolation_type = extra_args["interpolation_type"] # either sigmoid or linear
+        self.scale = extra_args["scale"]
+        self.shift = extra_args["shift"]
+        
+        self.min_beta = extra_args["min_beta"]
+        self.max_beta = extra_args["max_beta"]
 
         # if self.beta4 > 0:
         #     raise NotImplementedError(
@@ -278,13 +285,23 @@ class RMSDiffusionPredictor(Predictor):
         score = self.score_fn(x, t)
         d_sub_term = (d_G[:, None, None, None] ** 2) * score
         
+        if self.interpolation_type == "sigmoid":
+            beta2 = self.min_beta + (self.max_beta-self.min_beta) * self.sigmoid(counter, 
+                                                                                 self.scale, 
+                                                                                 self.shift, 
+                                                                                 self.sde.N)
+        elif self.interpolation_type == "linear":
+            beta2 = self.min_beta + (self.max_beta-self.min_beta) * counter / self.sde.N
+        else:
+            beta2 = self.beta2
+        
         
         # the moving average of the squared gradient
         m = extra_inputs["m"]
         counter = extra_inputs["counter"]
 
         # update m
-        m = self.beta2 * m + (1 - self.beta2) * (score**2)
+        m = beta2 * m + (1 - beta2) * (score**2)
 
         # construct f with preconditioning
         if self.adam_like:
@@ -325,6 +342,13 @@ class RMSDiffusionPredictor(Predictor):
         counter += 1
 
         return x, x_mean, {"m": m, "counter": counter}
+    
+    def sigmoid(self, x, scale, shift, num_steps):
+        """Sigmoid function for interpolation."""
+        # here x is the counter indicating the current iteration
+        return torch.where(x >= 0,
+                    1 / (1 + np.exp(-1 * scale * (x-shift) / num_steps)),
+                    np.exp(scale * (x-shift) / num_steps) / (1 + np.exp(scale * (x-shift) / num_steps)))
 
 
 @register_predictor(name="ancestral_sampling")
