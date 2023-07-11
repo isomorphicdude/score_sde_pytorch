@@ -787,7 +787,7 @@ def get_pc_sampler(
         if return_all:
             all_samples = []  
             
-        debug_mode = extra_args["debug"]
+        debug_mode = extra_args["debug_mode"]
         if debug_mode:
             #TODO: add other statistics to return for debugging
             score_list = []
