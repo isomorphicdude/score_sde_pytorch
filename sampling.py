@@ -344,7 +344,9 @@ class RMSDiffusionPredictor(Predictor):
         if not self.debug_mode:
             return x, x_mean, {"m": m, "counter": counter}
         else:
-            return x, x_mean, {"m": m, "counter": counter, "score": score}
+            return x, x_mean, {"m": m, 
+                               "counter": counter, 
+                               "score": score}
     
     def sigmoid(self, x, scale, shift, num_steps):
         """Sigmoid function for interpolation."""
@@ -791,6 +793,7 @@ def get_pc_sampler(
         if debug_mode:
             #TODO: add other statistics to return for debugging
             score_list = []
+            V_list = [] # store moving average
             
         with torch.no_grad():
             # Initial sample
@@ -817,6 +820,7 @@ def get_pc_sampler(
                     all_samples.append(inverse_scaler(x_mean if denoise else x))
                 if debug_mode:
                     score_list.append(extra_inputs_pred["score"])
+                    V_list.append(extra_inputs_pred["m"])
             # else:
             #     for i in range(sde.N):
             #         t = timesteps[i]
@@ -829,7 +833,7 @@ def get_pc_sampler(
         if return_all:
             return all_samples, sde.N * (n_steps + 1)
         elif debug_mode:
-            return inverse_scaler(x_mean if denoise else x), sde.N * (n_steps + 1), score_list
+            return inverse_scaler(x_mean if denoise else x), sde.N * (n_steps + 1), score_list, V_list
         else:
             return inverse_scaler(x_mean if denoise else x), sde.N * (n_steps + 1)
 
