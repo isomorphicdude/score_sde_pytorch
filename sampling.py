@@ -299,14 +299,15 @@ class RMSDiffusionPredictor(Predictor):
         else:
             beta2 = self.beta2
 
-        # update m
-        m = beta2 * m + (1 - beta2) * (score**2)
-
+       
         # construct f with preconditioning
         if self.adam_like:
             f = d_forward_drift - d_sub_term / torch.sqrt(m + self.lamb)
         else:
             f = d_forward_drift - d_sub_term / (torch.sqrt(m) + self.lamb)
+
+         # update m
+        m = beta2 * m + (1 - beta2) * (score**2)
 
         # construct noise with preconditioning, note the double sqrt
         if self.beta4 == 0:
