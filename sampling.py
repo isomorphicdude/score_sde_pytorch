@@ -260,6 +260,7 @@ class RMSDiffusionPredictor(Predictor):
         
         self.min_beta = extra_args["min_beta"]
         self.max_beta = extra_args["max_beta"]
+        self.debug_mode = extra_args["debug_mode"]
 
         # if self.beta4 > 0:
         #     raise NotImplementedError(
@@ -339,8 +340,11 @@ class RMSDiffusionPredictor(Predictor):
 
         # update counter
         counter += 1
-
-        return x, x_mean, {"m": m, "counter": counter}
+        
+        if not self.debug_mode:
+            return x, x_mean, {"m": m, "counter": counter}
+        else:
+            return x, x_mean, {"m": m, "counter": counter, "score": score}
     
     def sigmoid(self, x, scale, shift, num_steps):
         """Sigmoid function for interpolation."""
@@ -783,6 +787,11 @@ def get_pc_sampler(
         if return_all:
             all_samples = []  
             
+        debug_mode = extra_args["debug"]
+        if debug_mode:
+            #TODO: add other statistics to return for debugging
+            score_list = []
+            
         with torch.no_grad():
             # Initial sample
             x = sde.prior_sampling(shape).to(device)
@@ -806,6 +815,8 @@ def get_pc_sampler(
                 )
                 if return_all:
                     all_samples.append(inverse_scaler(x_mean if denoise else x))
+                if debug_mode:
+                    score_list.append(extra_inputs_pred["score"])
             # else:
             #     for i in range(sde.N):
             #         t = timesteps[i]
@@ -817,6 +828,8 @@ def get_pc_sampler(
                         
         if return_all:
             return all_samples, sde.N * (n_steps + 1)
+        elif debug_mode:
+            return inverse_scaler(x_mean if denoise else x), sde.N * (n_steps + 1), score_list
         else:
             return inverse_scaler(x_mean if denoise else x), sde.N * (n_steps + 1)
 
