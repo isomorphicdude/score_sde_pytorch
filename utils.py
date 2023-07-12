@@ -35,7 +35,10 @@ def save_checkpoint(ckpt_dir, state):
     torch.save(saved_state, ckpt_dir)
 
 
-def save_gif(all_samples, config, ckpt, workdir, image_dir='images', duration=100):
+def save_gif(all_samples, config, ckpt, workdir, 
+             image_dir='images', 
+             duration=100,
+             every_t = 10):
     """
     Save samples as a GIF file.
     
@@ -46,6 +49,7 @@ def save_gif(all_samples, config, ckpt, workdir, image_dir='images', duration=10
       - workdir: working directory
       - image_dir: directory to save the images
       - duration: duration of each frame in the GIF, in miliseconds 0.1s = 100ms
+      - every_t: save every t images
     """
     folder = os.path.join(workdir, image_dir, f"ckpt_{ckpt}")
     
@@ -77,8 +81,8 @@ def save_gif(all_samples, config, ckpt, workdir, image_dir='images', duration=10
         image_grid = make_grid(sample, 
                                nrow=int(np.sqrt(config.eval.batch_size)))
         
-        # store every 10 images
-        if i % 10 == 0:
+        # store every 10 images by default
+        if i % every_t == 0:
             im = Image.fromarray(image_grid.mul_(255.)
                                  .clamp_(0, 255)
                                  .permute(1, 2, 0)
