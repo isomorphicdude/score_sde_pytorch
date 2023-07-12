@@ -242,8 +242,8 @@ class NCSNpp(nn.Module):
     elif self.embedding_type == 'positional':
       # Sinusoidal positional embeddings.
       timesteps = time_cond
-      # used_sigmas = self.sigmas[time_cond.long()]
-      used_sigmas = self.sigmas[time_cond.int()]
+      used_sigmas = self.sigmas[time_cond.long()]
+      # used_sigmas = self.sigmas[time_cond.int()]
       temb = layers.get_timestep_embedding(timesteps, self.nf)
 
     else:
