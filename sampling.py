@@ -816,8 +816,10 @@ def get_pc_sampler(
                 x, x_mean, extra_inputs_pred = predictor_update_fn(
                     x, vec_t, model=model, extra_inputs=extra_inputs_pred
                 )
+                
                 if return_all:
                     all_samples.append(inverse_scaler(x_mean if denoise else x))
+                    
                 if debug_mode:
                     score_list.append(extra_inputs_pred["score"])
                     V_list.append(extra_inputs_pred["m"])

@@ -55,7 +55,9 @@ def get_config():
   model.skip_rescale = True
   model.resblock_type = 'biggan'
   model.progressive = 'none'
-  model.progressive_input = 'none'
+  # missing residual compared to cifar10_ncsnpp_continuous.py
+  # only weights for this model are in the checkpoint
+  model.progressive_input = 'none' 
   model.progressive_combine = 'sum'
   model.attention_type = 'ddpm'
   model.init_scale = 0.

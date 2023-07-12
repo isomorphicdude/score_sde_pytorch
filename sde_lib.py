@@ -173,6 +173,9 @@ class VPSDE(SDE):
     return drift, diffusion
 
   def marginal_prob(self, x, t):
+    # directly integrating the discretized version
+    # mean = x(0) * exp(-0.5 * \int_{0}^{t} beta(s) ds)
+    # variance = 1 - exp(-\int_{0}^{t} beta(s) ds}) [identity matrix]
     log_mean_coeff = -0.25 * t ** 2 * (self.beta_1 - self.beta_0) - 0.5 * t * self.beta_0
     mean = torch.exp(log_mean_coeff[:, None, None, None]) * x
     std = torch.sqrt(1. - torch.exp(2. * log_mean_coeff))
