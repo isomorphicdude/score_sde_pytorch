@@ -367,6 +367,9 @@ class AdamDiffusionPredictor(Predictor):
         if self.correct_bias:
             m_hat = m / (1 - self.beta1 ** (counter + 1))
             v_hat = v / (1 - self.beta2 ** (counter + 1))
+        else:
+            m_hat = m
+            v_hat = v
         
         # here the score in sub_term is replaced by first moment
         d_sub_term = (d_G[:, None, None, None] ** 2) * m_hat
