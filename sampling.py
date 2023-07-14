@@ -245,8 +245,7 @@ class RMSDiffusionPredictor(Predictor):
         if extra_args is None:
             raise ValueError("RMSDiffusionPredictor requires extra arguments.")
 
-        self.beta2 = extra_args["beta2"]
-        self.beta4 = extra_args["beta4"]
+        self.beta_pred = extra_args["beta_pred"]
         self.sde_lr = extra_args["sde_lr"]
         self.adam_like = extra_args["adam_like"] # whether to use adam-like update
         self.lamb = extra_args["lamb"] # the extreme values of pre-conditioner
@@ -272,17 +271,17 @@ class RMSDiffusionPredictor(Predictor):
         d_sub_term = (d_G[:, None, None, None] ** 2) * score
         
         if self.interpolation_type == "sigmoid":
-            beta2 = self.min_beta + (self.max_beta-self.min_beta) * self.sigmoid(counter, 
+            beta_pred = self.min_beta + (self.max_beta-self.min_beta) * self.sigmoid(counter, 
                                                                                  self.scale, 
                                                                                  self.shift, 
                                                                                  self.sde.N)
         elif self.interpolation_type == "linear":
-            beta2 = self.min_beta + (self.max_beta-self.min_beta) * counter / self.sde.N
+            beta_pred = self.min_beta + (self.max_beta-self.min_beta) * counter / self.sde.N
         else:
-            beta2 = self.beta2
+            beta_pred = self.beta_pred
 
         # update m
-        V = beta2 * V + (1 - beta2) * (score**2)
+        V = beta_pred * V + (1 - beta_pred) * (score**2)
 
         # construct f with preconditioning
         if self.adam_like:
@@ -817,8 +816,6 @@ def get_pc_sampler(
         continuous=continuous,
     )
     
-    print(predictor_update_fn.__name__)
-    print(corrector_update_fn.__name__)
     corrector_update_fn = functools.partial(
         shared_corrector_update_fn,
         modified_pc=modified_pc,
@@ -829,8 +826,11 @@ def get_pc_sampler(
         snr=snr,
         n_steps=n_steps,
     )
+    
+    print(predictor.__name__)
+    print(corrector.__name__)
 
-        # need to initialize the extra inputs
+    
     def pc_sampler(model):
         """The PC sampler funciton.
 
@@ -853,11 +853,18 @@ def get_pc_sampler(
             x = sde.prior_sampling(shape).to(device)
             timesteps = torch.linspace(sde.T, eps, sde.N, device=device)
 
-            # if modified_pc:
+            
             # initialize the extra inputs
-            extra_inputs_corr = {"V": torch.zeros_like(x), "counter": 0}
+            if predictor.__name__ == "rms_langevin":
+                extra_inputs_corr = {"V": torch.zeros_like(x), "counter": 0}
 
-            extra_inputs_pred = {"V": torch.zeros_like(x), "counter": 0}
+            if corrector.__name__ == "rms_reverse_diffusion":
+                extra_inputs_pred = {"V": torch.zeros_like(x), "counter": 0}
+                
+            if predictor.__name__ == "adam_reverse_diffusion":
+                extra_inputs_pred = {"m": torch.zeros_like(x), 
+                                     "v": torch.zeros_like(x),
+                                     "counter": 0}
             # TODO: add other predictors
 
             for i in range(sde.N):
