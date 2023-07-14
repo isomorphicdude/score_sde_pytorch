@@ -826,9 +826,6 @@ def get_pc_sampler(
         snr=snr,
         n_steps=n_steps,
     )
-    
-    print(predictor.__name__)
-    print(corrector.__name__)
 
     
     def pc_sampler(model):
@@ -843,10 +840,12 @@ def get_pc_sampler(
             all_samples = []  
             
         debug_mode = extra_args["debug_mode"]
+        
         if debug_mode:
             #TODO: add other statistics to return for debugging
             score_list = []
             V_list = [] # store moving average
+            m_list = []
             
         with torch.no_grad():
             # Initial sample
@@ -855,13 +854,13 @@ def get_pc_sampler(
 
             
             # initialize the extra inputs
-            if predictor.__name__ == "rms_langevin":
+            if corrector.__name__ == "RMSLangevinCorrector":
                 extra_inputs_corr = {"V": torch.zeros_like(x), "counter": 0}
 
-            if corrector.__name__ == "rms_reverse_diffusion":
+            if predictor.__name__ == "RMSDiffusionPredictor":
                 extra_inputs_pred = {"V": torch.zeros_like(x), "counter": 0}
                 
-            if predictor.__name__ == "adam_reverse_diffusion":
+            if predictor.__name__ == "AdamDiffusionPredictor":
                 extra_inputs_pred = {"m": torch.zeros_like(x), 
                                      "v": torch.zeros_like(x),
                                      "counter": 0}
@@ -880,22 +879,20 @@ def get_pc_sampler(
                 if return_all:
                     all_samples.append(inverse_scaler(x_mean if denoise else x))
                     
-                if debug_mode:
+                if debug_mode and predictor.__name__ == "RMSDiffusionPredictor":
                     score_list.append(extra_inputs_pred["score"])
                     V_list.append(extra_inputs_pred["V"])
-            # else:
-            #     for i in range(sde.N):
-            #         t = timesteps[i]
-            #         vec_t = torch.ones(shape[0], device=t.device) * t
-            #         x, x_mean = corrector_update_fn(x, vec_t, model=model)
-            #         x, x_mean = predictor_update_fn(x, vec_t, model=model)
-            #         if return_all:
-            #             all_samples.append(inverse_scaler(x_mean if denoise else x))
+                    
+                elif debug_mode and predictor.__name__ == "AdamDiffusionPredictor":
+                    score_list.append(extra_inputs_pred["score"])
+                    V_list.append(extra_inputs_pred["v"])
+                    m_list.append(extra_inputs_pred["m"])
                         
         if return_all:
             return all_samples, sde.N * (n_steps + 1)
         elif debug_mode:
-            return inverse_scaler(x_mean if denoise else x), sde.N * (n_steps + 1), score_list, V_list
+            return inverse_scaler(x_mean if denoise else x), sde.N * (n_steps + 1), \
+                score_list, V_list, m_list
         else:
             return inverse_scaler(x_mean if denoise else x), sde.N * (n_steps + 1)
 
