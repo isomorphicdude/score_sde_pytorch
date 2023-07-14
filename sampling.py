@@ -857,6 +857,8 @@ def get_pc_sampler(
             # if corrector is not None and corrector.__name__ == "RMSLangevinCorrector":
             #     extra_inputs_corr = {"V": torch.zeros_like(x), "counter": 0}
             extra_inputs_corr = None
+            extra_inputs_pred = None
+            
             if predictor.__name__ == "RMSDiffusionPredictor":
                 extra_inputs_pred = {"V": torch.zeros_like(x), "counter": 0}
                 
