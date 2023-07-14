@@ -221,7 +221,6 @@ class ReverseDiffusionPredictor(Predictor):
         super().__init__(sde, score_fn, probability_flow)
         if extra_args is not None:
             self.sde_lr = extra_args["sde_lr"]
-            self.scale_noise = extra_args["scale_noise"]
             self.scale = True
 
     def update_fn(self, x, t, extra_inputs=None):
@@ -230,8 +229,7 @@ class ReverseDiffusionPredictor(Predictor):
         
         if self.scale:
             x_mean = x - f * self.sde_lr
-            if self.scale_noise:
-                x = x_mean + G[:, None, None, None] * z * np.sqrt(self.sde_lr)
+            x = x_mean + G[:, None, None, None] * z * np.sqrt(self.sde_lr)
                 
         else:
             x_mean = x - f
@@ -250,7 +248,6 @@ class RMSDiffusionPredictor(Predictor):
         self.beta2 = extra_args["beta2"]
         self.beta4 = extra_args["beta4"]
         self.sde_lr = extra_args["sde_lr"]
-        self.scale_noise = extra_args["scale_noise"]
         self.adam_like = extra_args["adam_like"] # whether to use adam-like update
         self.lamb = extra_args["lamb"] # the extreme values of pre-conditioner
         
@@ -262,28 +259,12 @@ class RMSDiffusionPredictor(Predictor):
         self.max_beta = extra_args["max_beta"]
         self.debug_mode = extra_args["debug_mode"]
 
-        # if self.beta4 > 0:
-        #     raise NotImplementedError(
-        #         "RMSDiffusionPredictor not implemented for beta4 > 0."
-        #     )
 
-    # this is the predictor which takes input values from the corrector
-    # at the previous time step
     def update_fn(self, x, t, extra_inputs=None):
         """Returns 3 outputs for update step."""
-        # modified is set to true
-        # self.rsde.rsde_modified = True
-
-        # further check
-        # if not self.rsde.rsde_modified:
-        #     raise NotImplementedError(
-        #         "RMSDiffusionPredictor not implemented for non-modified SDEs."
-        #     )
-
-        # d_forward_drift, d_diffusion, d_sub_term, score = self.rsde.discretize(x, t)
         
         # the moving average of the squared gradient
-        m = extra_inputs["m"]
+        V = extra_inputs["V"]
         counter = extra_inputs["counter"]
         
         d_forward_drift, d_G = self.sde.discretize(x, t) # the G is multiplied by the sqrt
@@ -301,50 +282,47 @@ class RMSDiffusionPredictor(Predictor):
             beta2 = self.beta2
 
         # update m
-        m = beta2 * m + (1 - beta2) * (score**2)
+        V = beta2 * V + (1 - beta2) * (score**2)
 
         # construct f with preconditioning
         if self.adam_like:
-            f = d_forward_drift - d_sub_term / torch.sqrt(m + self.lamb)
+            f = d_forward_drift - d_sub_term / torch.sqrt(V + self.lamb)
         else:
-            f = d_forward_drift - d_sub_term / (torch.sqrt(m) + self.lamb)
+            f = d_forward_drift - d_sub_term / (torch.sqrt(V) + self.lamb)
 
         # construct noise with preconditioning, note the double sqrt
         if self.beta4 == 0:
             if self.adam_like:
-                z = torch.randn_like(x) / torch.sqrt(torch.sqrt(m + self.lamb))
+                z = torch.randn_like(x) / torch.sqrt(torch.sqrt(V + self.lamb))
             else:
-                z = torch.randn_like(x) / (torch.sqrt(torch.sqrt(m) + self.lamb))
+                z = torch.randn_like(x) / (torch.sqrt(torch.sqrt(V) + self.lamb))
         else:
             if self.adam_like:
                 z = (
                     np.sqrt(1 / self.beta4 * 1 / (counter + 1))
                     * torch.randn_like(x)
-                    / torch.sqrt(torch.sqrt(m + self.lamb))
+                    / torch.sqrt(torch.sqrt(V + self.lamb))
                 )
             else:
                 z = (
                     np.sqrt(1 / self.beta4 * 1 / (counter + 1))
                     * torch.randn_like(x)
-                    / (torch.sqrt(torch.sqrt(m) + self.lamb))
+                    / (torch.sqrt(torch.sqrt(V) + self.lamb))
                 )
 
         # update x
         x_mean = x - f * self.sde_lr
 
         # update x_mean (no noise at the last step)
-        if self.scale_noise:
-            x = x_mean + d_G[:, None, None, None] * z * np.sqrt(self.sde_lr)
-        else:
-            x = x_mean + d_G[:, None, None, None] * z
+        x = x_mean + d_G[:, None, None, None] * z * np.sqrt(self.sde_lr)
 
         # update counter
         counter += 1
         
         if not self.debug_mode:
-            return x, x_mean, {"m": m, "counter": counter}
+            return x, x_mean, {"V": V, "counter": counter}
         else:
-            return x, x_mean, {"m": m, 
+            return x, x_mean, {"V": V, 
                                "counter": counter, 
                                "score": score}
     
@@ -352,6 +330,78 @@ class RMSDiffusionPredictor(Predictor):
         """Sigmoid function for interpolation."""
         # here x is the counter indicating the current iteration
         return torch.sigmoid(torch.tensor(scale * (x-shift)/num_steps))
+    
+    
+@register_predictor(name="adam_reverse_diffusion")
+class AdamDiffusionPredictor(Predictor):
+    def __init__(self, sde, score_fn, probability_flow=False, extra_args=None):
+        super().__init__(sde, score_fn, probability_flow)
+        if extra_args is None:
+            raise ValueError("AdamDiffusionPredictor requires extra arguments.")
+
+        self.beta1 = extra_args["beta1"]
+        self.beta2 = extra_args["beta2"]
+        self.sde_lr = extra_args["sde_lr"]
+        self.correct_bias = extra_args["correct_bias"]
+        self.adam_like = extra_args["adam_like"] # whether to use adam-like update
+        self.lamb = extra_args["lamb"] # the extreme values of pre-conditioner
+        
+        self.debug_mode = extra_args["debug_mode"]
+
+
+    def update_fn(self, x, t, extra_inputs=None):
+        """Returns 3 outputs for update step."""
+        
+        # the moving average of the squared gradient
+        m = extra_inputs["m"]
+        v = extra_inputs["v"]
+        counter = extra_inputs["counter"]
+        
+        d_forward_drift, d_G = self.sde.discretize(x, t) # the G is multiplied by the sqrt
+        score = self.score_fn(x, t)
+
+        # update m and v
+        m = self.beta1 * m + (1 - self.beta1) * score
+        v = self.beta2 * v + (1 - self.beta2) * (score**2)
+        
+        # correct for bias
+        if self.correct_bias:
+            m_hat = m / (1 - self.beta1 ** (counter + 1))
+            v_hat = v / (1 - self.beta2 ** (counter + 1))
+        
+        # here the score in sub_term is replaced by first moment
+        d_sub_term = (d_G[:, None, None, None] ** 2) * m_hat
+
+        # construct f with preconditioning
+        if self.adam_like:
+            f = d_forward_drift - d_sub_term / torch.sqrt(v_hat + self.lamb)
+        else:
+            f = d_forward_drift - d_sub_term / (torch.sqrt(v_hat) + self.lamb)
+
+        # construct noise with preconditioning, note the double sqrt
+        if self.adam_like:
+            z = torch.randn_like(x) / torch.sqrt(torch.sqrt(v_hat + self.lamb))
+        else:
+            z = torch.randn_like(x) / (torch.sqrt(torch.sqrt(v_hat) + self.lamb))
+
+        # update x
+        x_mean = x - f * self.sde_lr
+
+        # update x_mean (no noise at the last step)
+        x = x_mean + d_G[:, None, None, None] * z * np.sqrt(self.sde_lr)
+
+        # update counter
+        counter += 1
+        
+        if not self.debug_mode:
+            return x, x_mean, {"m": m, 
+                               "v": v,
+                               "counter": counter}
+        else:
+            return x, x_mean, {"m": m, 
+                               "v": v,
+                               "counter": counter, 
+                               "score": score}
 
 
 @register_predictor(name="ancestral_sampling")
@@ -766,6 +816,9 @@ def get_pc_sampler(
         probability_flow=probability_flow,
         continuous=continuous,
     )
+    
+    print(predictor_update_fn.__name__)
+    print(corrector_update_fn.__name__)
     corrector_update_fn = functools.partial(
         shared_corrector_update_fn,
         modified_pc=modified_pc,
@@ -802,9 +855,9 @@ def get_pc_sampler(
 
             # if modified_pc:
             # initialize the extra inputs
-            extra_inputs_corr = {"m": torch.zeros_like(x), "counter": 0}
+            extra_inputs_corr = {"V": torch.zeros_like(x), "counter": 0}
 
-            extra_inputs_pred = {"m": torch.zeros_like(x), "counter": 0}
+            extra_inputs_pred = {"V": torch.zeros_like(x), "counter": 0}
             # TODO: add other predictors
 
             for i in range(sde.N):
@@ -822,7 +875,7 @@ def get_pc_sampler(
                     
                 if debug_mode:
                     score_list.append(extra_inputs_pred["score"])
-                    V_list.append(extra_inputs_pred["m"])
+                    V_list.append(extra_inputs_pred["V"])
             # else:
             #     for i in range(sde.N):
             #         t = timesteps[i]
