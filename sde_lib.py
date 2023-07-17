@@ -278,7 +278,7 @@ class VESDE(SDE):
     self.discrete_sigmas = torch.exp(torch.linspace(np.log(self.sigma_min), np.log(self.sigma_max), N))
     self.N = N
     
-    self.init_sampes = init_samples
+    self.init_samples = init_samples
     self.init_times = init_times
 
   @property
