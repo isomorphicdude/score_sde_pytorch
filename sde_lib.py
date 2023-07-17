@@ -144,13 +144,20 @@ class SDE(abc.ABC):
 
 
 class VPSDE(SDE):
-  def __init__(self, beta_min=0.1, beta_max=20, N=1000):
+  def __init__(self, 
+               beta_min=0.1, 
+               beta_max=20, 
+               N=1000,
+               init_samples=None,
+               init_times=1.0):
     """Construct a Variance Preserving SDE.
 
     Args:
       beta_min: value of beta(0)
       beta_max: value of beta(1)
       N: number of discretization steps
+      init_samples: initial samples for the SDE
+      init_times: initial times for the SDE, default to 1.0
     """
     super().__init__(N)
     self.beta_0 = beta_min
@@ -161,10 +168,14 @@ class VPSDE(SDE):
     self.alphas_cumprod = torch.cumprod(self.alphas, dim=0)
     self.sqrt_alphas_cumprod = torch.sqrt(self.alphas_cumprod)
     self.sqrt_1m_alphas_cumprod = torch.sqrt(1. - self.alphas_cumprod)
+    
+    
+    self.init_samples = init_samples
+    self.init_times = init_times
 
   @property
   def T(self):
-    return 1
+    return 1 * self.init_times
 
   def sde(self, x, t):
     beta_t = self.beta_0 + t * (self.beta_1 - self.beta_0)
@@ -182,7 +193,11 @@ class VPSDE(SDE):
     return mean, std
 
   def prior_sampling(self, shape):
-    return torch.randn(*shape)
+    if self.init_samples is not None:
+      assert self.init_samples.shape == shape
+      return self.init_samples
+    else:
+      return torch.randn(*shape)
 
   def prior_logp(self, z):
     shape = z.shape
@@ -242,23 +257,33 @@ class subVPSDE(SDE):
 
 
 class VESDE(SDE):
-  def __init__(self, sigma_min=0.01, sigma_max=50, N=1000):
+  def __init__(self, 
+               sigma_min=0.01, 
+               sigma_max=50, 
+               N=1000,
+               init_samples=None,
+               init_times=1.0):
     """Construct a Variance Exploding SDE.
 
     Args:
       sigma_min: smallest sigma.
       sigma_max: largest sigma.
       N: number of discretization steps
+      init_samples: initial samples for the SDE.
+      init_times: initial times for the SDE.
     """
     super().__init__(N)
     self.sigma_min = sigma_min
     self.sigma_max = sigma_max
     self.discrete_sigmas = torch.exp(torch.linspace(np.log(self.sigma_min), np.log(self.sigma_max), N))
     self.N = N
+    
+    self.init_sampes = init_samples
+    self.init_times = init_times
 
   @property
   def T(self):
-    return 1
+    return 1 * self.init_times
 
   def sde(self, x, t):
     sigma = self.sigma_min * (self.sigma_max / self.sigma_min) ** t
@@ -273,7 +298,11 @@ class VESDE(SDE):
     return mean, std
 
   def prior_sampling(self, shape):
-    return torch.randn(*shape) * self.sigma_max
+    if self.init_samples is not None:
+      assert self.init_samples.shape == shape
+      return self.init_samples
+    else:
+      return torch.randn(*shape) * self.sigma_max
 
   def prior_logp(self, z):
     shape = z.shape

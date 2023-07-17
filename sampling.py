@@ -851,7 +851,10 @@ def get_pc_sampler(
             m_list = []
             
         with torch.no_grad():
+            #TODO: Need to change the SDE prior to any input
+            #TODO: Need to change the SDE initial time sde.T
             # Initial sample
+            
             x = sde.prior_sampling(shape).to(device)
             timesteps = torch.linspace(sde.T, eps, sde.N, device=device)
 
