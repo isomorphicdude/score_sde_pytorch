@@ -290,24 +290,24 @@ class RMSDiffusionPredictor(Predictor):
             f = d_forward_drift - d_sub_term / (torch.sqrt(V) + self.lamb)
 
         # construct noise with preconditioning, note the double sqrt
-        if self.beta4 == 0:
-            if self.adam_like:
-                z = torch.randn_like(x) / torch.sqrt(torch.sqrt(V + self.lamb))
-            else:
-                z = torch.randn_like(x) / (torch.sqrt(torch.sqrt(V) + self.lamb))
+        
+        if self.adam_like:
+            z = torch.randn_like(x) / torch.sqrt(torch.sqrt(V + self.lamb))
         else:
-            if self.adam_like:
-                z = (
-                    np.sqrt(1 / self.beta4 * 1 / (counter + 1))
-                    * torch.randn_like(x)
-                    / torch.sqrt(torch.sqrt(V + self.lamb))
-                )
-            else:
-                z = (
-                    np.sqrt(1 / self.beta4 * 1 / (counter + 1))
-                    * torch.randn_like(x)
-                    / (torch.sqrt(torch.sqrt(V) + self.lamb))
-                )
+            z = torch.randn_like(x) / (torch.sqrt(torch.sqrt(V) + self.lamb))
+        # else:
+        #     if self.adam_like:
+        #         z = (
+        #             np.sqrt(1 / self.beta4 * 1 / (counter + 1))
+        #             * torch.randn_like(x)
+        #             / torch.sqrt(torch.sqrt(V + self.lamb))
+        #         )
+        #     else:
+        #         z = (
+        #             np.sqrt(1 / self.beta4 * 1 / (counter + 1))
+        #             * torch.randn_like(x)
+        #             / (torch.sqrt(torch.sqrt(V) + self.lamb))
+        #         )
 
         # update x
         x_mean = x - f * self.sde_lr
