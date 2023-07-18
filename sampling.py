@@ -290,7 +290,7 @@ class RMSDiffusionPredictor(Predictor):
             # f = d_forward_drift - d_sub_term / (torch.sqrt(V) + self.lamb)
             
             # use clipping instead
-            f = d_forward_drift - d_sub_term / (torch.sqrt(torch.clamp(V, min=self.lamb)))
+            f = d_forward_drift - d_sub_term / (torch.clamp(torch.sqrt(V), min=self.lamb))
 
         # construct noise with preconditioning, note the double sqrt
         
@@ -300,7 +300,7 @@ class RMSDiffusionPredictor(Predictor):
             # z = torch.randn_like(x) / (torch.sqrt(torch.sqrt(V) + self.lamb))
             
             # use clipping instead
-            z = torch.randn_like(x) / (torch.sqrt(torch.sqrt(torch.clamp(V, min=self.lamb))))
+            z = torch.randn_like(x) / (torch.sqrt(torch.clamp(torch.sqrt(V), min=self.lamb)))
             
         # else:
         #     if self.adam_like:
@@ -873,7 +873,8 @@ def get_pc_sampler(
             extra_inputs_pred = None
             
             if predictor.__name__ == "RMSDiffusionPredictor":
-                extra_inputs_pred = {"V": torch.ones_like(x), "counter": 0}
+                extra_inputs_pred = {"V": torch.zeros_like(x), 
+                                     "counter": 0}
                 
             if predictor.__name__ == "AdamDiffusionPredictor":
                 extra_inputs_pred = {"m": torch.zeros_like(x), 
