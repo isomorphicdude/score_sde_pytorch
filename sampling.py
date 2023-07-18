@@ -322,6 +322,9 @@ class RMSDiffusionPredictor(Predictor):
         # update x
         x = x_mean + d_G[:, None, None, None] * z * np.sqrt(self.sde_lr)
 
+        
+        # x_mean = x + d_G[:, None, None, None] * score * self.sde_lr / (torch.clamp(torch.sqrt(V), min=self.lamb))
+
         # update counter
         counter += 1
         
