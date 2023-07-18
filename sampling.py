@@ -873,7 +873,7 @@ def get_pc_sampler(
             extra_inputs_pred = None
             
             if predictor.__name__ == "RMSDiffusionPredictor":
-                extra_inputs_pred = {"V": torch.zeros_like(x), "counter": 0}
+                extra_inputs_pred = {"V": torch.ones_like(x), "counter": 0}
                 
             if predictor.__name__ == "AdamDiffusionPredictor":
                 extra_inputs_pred = {"m": torch.zeros_like(x), 
