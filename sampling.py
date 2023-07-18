@@ -266,7 +266,7 @@ class RMSDiffusionPredictor(Predictor):
         V = extra_inputs["V"]
         counter = extra_inputs["counter"]
         
-        d_forward_drift, d_G = self.sde.discretize(x, t) # the G is multiplied by the sqrt
+        d_forward_drift, d_G = self.sde.discretize(x, t)
         score = self.score_fn(x, t)
         d_sub_term = (d_G[:, None, None, None] ** 2) * score
         
@@ -316,11 +316,14 @@ class RMSDiffusionPredictor(Predictor):
         #             / (torch.sqrt(torch.sqrt(V) + self.lamb))
         #         )
 
-        # update x
+        # update x_mean (no noise at the last step)
         x_mean = x - f * self.sde_lr
 
-        # update x_mean (no noise at the last step)
+        # update x
         x = x_mean + d_G[:, None, None, None] * z * np.sqrt(self.sde_lr)
+
+        
+        x_mean = x + d_G[:,...]**2 * score * self.sde_lr
 
         # update counter
         counter += 1
