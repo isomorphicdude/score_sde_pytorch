@@ -287,14 +287,21 @@ class RMSDiffusionPredictor(Predictor):
         if self.adam_like:
             f = d_forward_drift - d_sub_term / torch.sqrt(V + self.lamb)
         else:
-            f = d_forward_drift - d_sub_term / (torch.sqrt(V) + self.lamb)
+            # f = d_forward_drift - d_sub_term / (torch.sqrt(V) + self.lamb)
+            
+            # use clipping instead
+            f = d_forward_drift - d_sub_term / (torch.sqrt(torch.clamp(V, min=self.lamb)))
 
         # construct noise with preconditioning, note the double sqrt
         
         if self.adam_like:
             z = torch.randn_like(x) / torch.sqrt(torch.sqrt(V + self.lamb))
         else:
-            z = torch.randn_like(x) / (torch.sqrt(torch.sqrt(V) + self.lamb))
+            # z = torch.randn_like(x) / (torch.sqrt(torch.sqrt(V) + self.lamb))
+            
+            # use clipping instead
+            z = torch.randn_like(x) / (torch.sqrt(torch.sqrt(torch.clamp(V, min=self.lamb))))
+            
         # else:
         #     if self.adam_like:
         #         z = (
