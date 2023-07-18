@@ -257,6 +257,7 @@ class RMSDiffusionPredictor(Predictor):
         self.min_beta = extra_args["min_beta"]
         self.max_beta = extra_args["max_beta"]
         self.debug_mode = extra_args["debug_mode"]
+        self.decay_rate = extra_args["decay_rate"]
 
 
     def update_fn(self, x, t, extra_inputs=None):
@@ -282,6 +283,9 @@ class RMSDiffusionPredictor(Predictor):
 
         # update m
         V = beta_pred * V + (1 - beta_pred) * (score**2)
+        
+        
+        correction_term = 0 if self.decay_rate == 0 else torch.exp(torch.tensor(-self.decay_rate * counter))
 
         # construct f with preconditioning
         if self.adam_like:
@@ -290,8 +294,7 @@ class RMSDiffusionPredictor(Predictor):
             # f = d_forward_drift - d_sub_term / (torch.sqrt(V) + self.lamb)
             
             # use clipping instead
-            f = d_forward_drift - d_sub_term / (torch.clamp(torch.sqrt(V) + torch.exp(torch.tensor(-10.0 * counter)), \
-                min=self.lamb))
+            f = d_forward_drift - d_sub_term / (torch.clamp(torch.sqrt(V) + correction_term, min=self.lamb))
 
         # construct noise with preconditioning, note the double sqrt
         
@@ -301,8 +304,7 @@ class RMSDiffusionPredictor(Predictor):
             # z = torch.randn_like(x) / (torch.sqrt(torch.sqrt(V) + self.lamb))
             
             # use clipping instead
-            z = torch.randn_like(x) / (torch.sqrt(torch.clamp(torch.sqrt(V)+ torch.exp(torch.tensor(-10.0 * counter)), \
-                min=self.lamb)))
+            z = torch.randn_like(x) / (torch.sqrt(torch.clamp(torch.sqrt(V)+ correction_term), min=self.lamb))
             
         # else:
         #     if self.adam_like:
