@@ -304,7 +304,7 @@ class RMSDiffusionPredictor(Predictor):
             # z = torch.randn_like(x) / (torch.sqrt(torch.sqrt(V) + self.lamb))
             
             # use clipping instead
-            z = torch.randn_like(x) / (torch.sqrt(torch.clamp(torch.sqrt(V)+ correction_term), min=self.lamb))
+            z = torch.randn_like(x) / (torch.sqrt(torch.clamp(torch.sqrt(V)+ correction_term, min=self.lamb)))
             
         # else:
         #     if self.adam_like:
