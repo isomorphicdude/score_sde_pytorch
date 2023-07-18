@@ -222,10 +222,14 @@ class ReverseDiffusionPredictor(Predictor):
         if extra_args is not None:
             self.sde_lr = extra_args["sde_lr"]
             self.scale = True
+            self.debug_mode = extra_args["debug_mode"]
 
     def update_fn(self, x, t, extra_inputs=None):
         f, G = self.rsde.discretize(x, t)
         z = torch.randn_like(x)
+        
+        if self.debug_mode:
+            score = self.score_fn(x, t)
         
         if self.scale:
             x_mean = x - f * self.sde_lr
@@ -234,8 +238,10 @@ class ReverseDiffusionPredictor(Predictor):
         else:
             x_mean = x - f
             x = x_mean + G[:, None, None, None] * z
-            
-        return x, x_mean, None
+        if self.debug_mode:
+            return x, x_mean, {'score': score}
+        else:
+            return x, x_mean, None
 
 
 @register_predictor(name="rms_reverse_diffusion")
@@ -910,6 +916,9 @@ def get_pc_sampler(
                     score_list.append(extra_inputs_pred["score"])
                     V_list.append(extra_inputs_pred["v"])
                     m_list.append(extra_inputs_pred["m"])
+                    
+                elif debug_mode and predictor.__name__ == "ReverseDiffusionPredictor":
+                    score_list.append(extra_inputs_pred["score"])
                         
         if return_all:
             return all_samples, sde.N * (n_steps + 1)
