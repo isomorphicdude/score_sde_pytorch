@@ -52,7 +52,12 @@ def optimization_manager(config):
   return optimize_fn
 
 
-def get_sde_loss_fn(sde, train, reduce_mean=True, continuous=True, likelihood_weighting=True, eps=1e-5):
+def get_sde_loss_fn(sde, 
+                    train, 
+                    reduce_mean=True, 
+                    continuous=True, 
+                    likelihood_weighting=True, 
+                    eps=1e-5):
   """Create a loss function for training with arbirary SDEs.
 
   Args:
@@ -91,6 +96,7 @@ def get_sde_loss_fn(sde, train, reduce_mean=True, continuous=True, likelihood_we
       losses = torch.square(score * std[:, None, None, None] + z)
       losses = reduce_op(losses.reshape(losses.shape[0], -1), dim=-1)
     else:
+      # for continuous models, weighting is not used
       g2 = sde.sde(torch.zeros_like(batch), t)[1] ** 2
       losses = torch.square(score + z / std[:, None, None, None])
       losses = reduce_op(losses.reshape(losses.shape[0], -1), dim=-1) * g2

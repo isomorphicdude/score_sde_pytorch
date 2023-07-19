@@ -27,6 +27,8 @@ from scipy import integrate
 import sde_lib
 from models import utils as mutils
 
+from losses import get_sde_loss_fn
+
 _CORRECTORS = {}
 _PREDICTORS = {}
 
@@ -223,6 +225,8 @@ class ReverseDiffusionPredictor(Predictor):
             self.sde_lr = extra_args["sde_lr"]
             self.scale = True
             self.debug_mode = extra_args["debug_mode"]
+            self.get_loss = extra_args["get_loss"]
+            self.loss_fn = extra_args["loss_fn"]
 
     def update_fn(self, x, t, extra_inputs=None):
         f, G = self.rsde.discretize(x, t)
@@ -238,8 +242,10 @@ class ReverseDiffusionPredictor(Predictor):
         else:
             x_mean = x - f
             x = x_mean + G[:, None, None, None] * z
-        if self.debug_mode:
+        if self.debug_mode and not self.get_loss:
             return x, x_mean, {'score': score}
+        elif self.debug_mode and self.get_loss:
+            return x, x_mean, {'score': score, 'loss': self.loss_fn(x, t)}
         else:
             return x, x_mean, None
 
@@ -264,6 +270,9 @@ class RMSDiffusionPredictor(Predictor):
         self.max_beta = extra_args["max_beta"]
         self.debug_mode = extra_args["debug_mode"]
         self.decay_rate = extra_args["decay_rate"]
+        
+        self.get_loss = extra_args["get_loss"]
+        self.loss_fn = extra_args["loss_fn"]
 
 
     def update_fn(self, x, t, extra_inputs=None):
@@ -337,13 +346,18 @@ class RMSDiffusionPredictor(Predictor):
 
         # update counter
         counter += 1
-        
-        if not self.debug_mode:
-            return x, x_mean, {"V": V, "counter": counter}
-        else:
+            
+        if self.debug_mode and not self.get_loss:
             return x, x_mean, {"V": V, 
                                "counter": counter, 
                                "score": score}
+        elif self.debug_mode and self.get_loss:
+            return x, x_mean, {"V": V,
+                               "counter": counter,
+                               "score": score,
+                               "loss": self.loss_fn(x, x_mean)}
+        else:
+            return x, x_mean, {"V": V, "counter": counter}
     
     def sigmoid(self, x, scale, shift, num_steps):
         """Sigmoid function for interpolation."""
@@ -829,6 +843,20 @@ def get_pc_sampler(
       A sampling function that returns samples and the number of function evaluations during sampling.
     """
     # Create predictor & corrector update functions
+    
+    get_loss = extra_args["get_loss"]
+    
+    if get_loss:
+        # initialize loss function
+        loss_fn = get_sde_loss_fn(sde, 
+                                train=False,
+                                reduce_mean=False,
+                                continuous=continuous,
+                                likelihood_weighting=False,
+                                eps=eps
+                                )
+        extra_args["loss_fn"] = loss_fn
+    
     predictor_update_fn = functools.partial(
         shared_predictor_update_fn,
         modified_pc=modified_pc,
@@ -869,6 +897,9 @@ def get_pc_sampler(
             score_list = []
             V_list = [] # store moving average
             m_list = []
+            
+        if get_loss:
+            all_losses = []
             
         with torch.no_grad():
             #TODO: Need to change the SDE prior to any input
@@ -919,12 +950,19 @@ def get_pc_sampler(
                     
                 elif debug_mode and predictor.__name__ == "ReverseDiffusionPredictor":
                     score_list.append(extra_inputs_pred["score"])
+                    
+                if get_loss:
+                    all_losses.append(extra_inputs_pred["loss"])
+                
                         
         if return_all:
             return all_samples, sde.N * (n_steps + 1)
-        elif debug_mode:
+        elif debug_mode and not get_loss:
             return inverse_scaler(x_mean if denoise else x), sde.N * (n_steps + 1), \
                 score_list, V_list, m_list
+        elif debug_mode and get_loss:
+            return inverse_scaler(x_mean if denoise else x), sde.N * (n_steps + 1), \
+                score_list, V_list, m_list, all_losses
         else:
             return inverse_scaler(x_mean if denoise else x), sde.N * (n_steps + 1)
 
