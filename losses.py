@@ -57,7 +57,8 @@ def get_sde_loss_fn(sde,
                     reduce_mean=True, 
                     continuous=True, 
                     likelihood_weighting=True, 
-                    eps=1e-5):
+                    eps=1e-5,
+                    during_sampling=False):
   """Create a loss function for training with arbirary SDEs.
 
   Args:
@@ -68,43 +69,62 @@ def get_sde_loss_fn(sde,
       ad-hoc interpolation to take continuous time steps.
     likelihood_weighting: If `True`, weight the mixture of score matching losses
       according to https://arxiv.org/abs/2101.09258; otherwise use the weighting recommended in our paper.
-    eps: A `float` number. The smallest time step to sample from.
+    eps: A `float` number. The smallest time step to sample from.  
+    during_sampling: If `True`, the loss function is used during sampling.
 
   Returns:
     A loss function.
   """
   reduce_op = torch.mean if reduce_mean else lambda *args, **kwargs: 0.5 * torch.sum(*args, **kwargs)
 
-  def loss_fn(model, batch):
-    """Compute the loss function.
+  if not during_sampling:
+    def loss_fn(model, batch):
+      """Compute the loss function.
 
-    Args:
-      model: A score model.
-      batch: A mini-batch of training data.
+      Args:
+        model: A score model.
+        batch: A mini-batch of training data.
 
-    Returns:
-      loss: A scalar that represents the average loss value across the mini-batch.
-    """
-    score_fn = mutils.get_score_fn(sde, model, train=train, continuous=continuous)
-    t = torch.rand(batch.shape[0], device=batch.device) * (sde.T - eps) + eps
-    z = torch.randn_like(batch)
-    mean, std = sde.marginal_prob(batch, t)
-    perturbed_data = mean + std[:, None, None, None] * z
-    score = score_fn(perturbed_data, t)
+      Returns:
+        loss: A scalar that represents the average loss value across the mini-batch.
+      """
+      score_fn = mutils.get_score_fn(sde, model, train=train, continuous=continuous)
+      t = torch.rand(batch.shape[0], device=batch.device) * (sde.T - eps) + eps
+      z = torch.randn_like(batch)
+      mean, std = sde.marginal_prob(batch, t)
+      perturbed_data = mean + std[:, None, None, None] * z
+      score = score_fn(perturbed_data, t)
 
-    if not likelihood_weighting:
-      losses = torch.square(score * std[:, None, None, None] + z)
-      losses = reduce_op(losses.reshape(losses.shape[0], -1), dim=-1)
-    else:
-      # for continuous models, weighting is not used
-      g2 = sde.sde(torch.zeros_like(batch), t)[1] ** 2
-      losses = torch.square(score + z / std[:, None, None, None])
-      losses = reduce_op(losses.reshape(losses.shape[0], -1), dim=-1) * g2
+      if not likelihood_weighting:
+        losses = torch.square(score * std[:, None, None, None] + z)
+        losses = reduce_op(losses.reshape(losses.shape[0], -1), dim=-1)
+      else:
+        # for continuous models, weighting is not used
+        g2 = sde.sde(torch.zeros_like(batch), t)[1] ** 2
+        losses = torch.square(score + z / std[:, None, None, None])
+        losses = reduce_op(losses.reshape(losses.shape[0], -1), dim=-1) * g2
 
-    loss = torch.mean(losses)
-    return loss
+      loss = torch.mean(losses)
+      return loss
+  else:
+     def loss_fn(score_fn, batch):
+       t = torch.rand(batch.shape[0], device=batch.device) * (sde.T - eps) + eps
+       z = torch.randn_like(batch)
+       mean, std = sde.marginal_prob(batch, t)
+       perturbed_data = mean + std[:, None, None, None] * z
+       score = score_fn(perturbed_data, t)
+       
+       if not likelihood_weighting:
+         losses = torch.square(score * std[:, None, None, None] + z)
+         losses = reduce_op(losses.reshape(losses.shape[0], -1), dim=-1)
+       else:
+         g2 = sde.sde(torch.zeros_like(batch), t)[1] ** 2
+         losses = torch.square(score + z / std[:, None, None, None])
+         lossses = reduce_op(losses.reshape(losses.shape[0], -1), dim=-1) * g2
+       return torch.mean(losses)
 
   return loss_fn
+  
 
 
 def get_smld_loss_fn(vesde, train, reduce_mean=False):
