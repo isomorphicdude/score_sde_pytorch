@@ -245,7 +245,7 @@ class ReverseDiffusionPredictor(Predictor):
         if self.debug_mode and not self.get_loss:
             return x, x_mean, {'score': score}
         elif self.debug_mode and self.get_loss:
-            return x, x_mean, {'score': score, 'loss': self.loss_fn(x, t)}
+            return x, x_mean, {'score': score, 'loss': self.loss_fn(self.score_fn, x)}
         else:
             return x, x_mean, None
 
@@ -355,7 +355,7 @@ class RMSDiffusionPredictor(Predictor):
             return x, x_mean, {"V": V,
                                "counter": counter,
                                "score": score,
-                               "loss": self.loss_fn(x, x_mean)}
+                               "loss": self.loss_fn(self.score_fn, x)}
         else:
             return x, x_mean, {"V": V, "counter": counter}
     
