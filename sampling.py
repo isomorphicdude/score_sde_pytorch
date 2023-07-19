@@ -853,7 +853,8 @@ def get_pc_sampler(
                                 reduce_mean=False,
                                 continuous=continuous,
                                 likelihood_weighting=False,
-                                eps=eps
+                                eps=eps,
+                                during_sampling=True
                                 )
         extra_args["loss_fn"] = loss_fn
     
