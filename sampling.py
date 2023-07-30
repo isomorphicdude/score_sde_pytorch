@@ -960,8 +960,7 @@ def get_pc_sampler(
                 if return_all:
                     all_samples.append(inverse_scaler(x_mean if denoise else x))
                     
-                if debug_mode and (predictor.__name__ == "RMSDiffusionPredictor"
-                                   or corrector.__name___ == "RMSLangevinCorrector"):
+                if debug_mode and (predictor.__name__ == "RMSDiffusionPredictor"):
                     score_list.append(extra_inputs_pred["score"])
                     V_list.append(extra_inputs_pred["V"])
                 
@@ -971,8 +970,7 @@ def get_pc_sampler(
                     V_list.append(extra_inputs_pred["v"])
                     m_list.append(extra_inputs_pred["m"])
                     
-                elif debug_mode and (predictor.__name__ == "ReverseDiffusionPredictor"
-                                     or corrector.__name__ == "AnnealedLangevinDynamics"):
+                elif debug_mode and (predictor.__name__ == "ReverseDiffusionPredictor"):
                     score_list.append(extra_inputs_pred["score"])
                     V_list.append(extra_inputs_pred["V"])
                     
