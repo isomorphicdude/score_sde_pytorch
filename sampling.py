@@ -283,7 +283,8 @@ class RMSDiffusionPredictor(Predictor):
         self.decay_rate = extra_args["decay_rate"]
         
         self.get_loss = extra_args["get_loss"]
-        self.loss_fn = extra_args["loss_fn"]
+        if self.get_loss:
+            self.loss_fn = extra_args["loss_fn"]
 
 
     def update_fn(self, x, t, extra_inputs=None):
