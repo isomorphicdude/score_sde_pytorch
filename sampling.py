@@ -943,6 +943,9 @@ def get_pc_sampler(
                                      "v": torch.zeros_like(x),
                                      "counter": 0}
             # TODO: add other predictors
+            
+            if predictor.__name__ == "ReverseDiffusionPredictor" and debug_mode:
+                extra_inputs_pred = {"V": torch.zeros_like(x)}
 
             for i in range(sde.N):
                 t = timesteps[i]
