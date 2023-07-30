@@ -253,6 +253,7 @@ class ReverseDiffusionPredictor(Predictor):
                                'V': V}
         
         elif self.debug_mode and self.get_loss:
+            V = self.beta_pred * V + (1 - self.beta_pred) * (score**2)
             return x, x_mean, {'score': score, 
                                'V': V,
                                'loss': self.loss_fn(self.score_fn, x)}
