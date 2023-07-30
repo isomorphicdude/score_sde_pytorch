@@ -227,6 +227,8 @@ class ReverseDiffusionPredictor(Predictor):
             self.debug_mode = extra_args["debug_mode"]
             self.get_loss = extra_args["get_loss"]
             self.loss_fn = extra_args["loss_fn"]
+            self.beta_pred = extra_args["beta_pred"]
+            
 
     def update_fn(self, x, t, extra_inputs=None):
         f, G = self.rsde.discretize(x, t)
@@ -234,6 +236,7 @@ class ReverseDiffusionPredictor(Predictor):
         
         if self.debug_mode:
             score = self.score_fn(x, t)
+            V = extra_inputs['V']
         
         if self.scale:
             x_mean = x - f * self.sde_lr
@@ -242,10 +245,17 @@ class ReverseDiffusionPredictor(Predictor):
         else:
             x_mean = x - f
             x = x_mean + G[:, None, None, None] * z
+            
+        
         if self.debug_mode and not self.get_loss:
-            return x, x_mean, {'score': score}
+            V = self.beta_pred * V + (1 - self.beta_pred) * (score**2)
+            return x, x_mean, {'score': score,
+                               'V': V}
+        
         elif self.debug_mode and self.get_loss:
-            return x, x_mean, {'score': score, 'loss': self.loss_fn(self.score_fn, x)}
+            return x, x_mean, {'score': score, 
+                               'V': V,
+                               'loss': self.loss_fn(self.score_fn, x)}
         else:
             return x, x_mean, None
 
@@ -558,10 +568,14 @@ class RMSLangevinCorrector(Corrector):
         self.lr = extra_args["lr"]
 
         # parameters
-        self.beta1 = extra_args["beta1"]
-        self.beta3 = extra_args["beta3"]
-        # if self.beta3 > 0:
-        #     raise NotImplementedError("beta3 > 0 not yet supported")
+        self.beta_corr = extra_args["beta_corr"]
+        self.get_loss = extra_args["get_loss"]
+        self.loss_fn = extra_args["loss_fn"]
+        self.lamb = extra_args["lamb"]
+        self.debug_mode = extra_args['debug_mode']
+        if 'use_annealing' in extra_args.keys():
+            self.use_annealing = extra_args["use_annealing"]
+
 
     def update_fn(self, x, t, extra_inputs=None):
         sde = self.sde
@@ -575,7 +589,7 @@ class RMSLangevinCorrector(Corrector):
         else:
             alpha = torch.ones_like(t)
 
-        m = extra_inputs["m"]
+        V = extra_inputs["V"]
         counter = extra_inputs["counter"]
 
         for i in range(n_steps):
@@ -584,39 +598,33 @@ class RMSLangevinCorrector(Corrector):
             grad_norm = torch.norm(grad.reshape(grad.shape[0], -1), dim=-1).mean()
             noise_norm = torch.norm(noise.reshape(noise.shape[0], -1), dim=-1).mean()
 
-            # check nan
-            # print("Debugging RMSLangevinCorrector")
-            # print(grad.to('cpu').numpy())
-            # if torch.isnan(grad).any():
-            #   print(f'iteration {i} in RMSLangevinCorrector')
-            #   print(counter)
-            #   raise ValueError("grad is nan.")
-            # print("End debugging RMSLangevinCorrector")
-
             # update m
-            m = self.beta1 * m + (1 - self.beta1) * (grad**2)
+            V = self.beta_corr * V + (1 - self.beta_corr) * (grad**2)
 
             # adjust step size with extra learning rate, no snr
             step_size = self.lr * ((noise_norm / grad_norm) ** 2) * 2 * alpha
 
             # update without noise
-            x_mean = x + step_size[:, None, None, None] * grad / torch.sqrt(m + 1e-7)
+            x_mean = x + step_size[:, None, None, None] * grad / torch.sqrt(V + self.lamb)
 
             # update with noise
-            if self.beta3 == 0:
-                x = x_mean + torch.sqrt(step_size * 2)[
-                    :, None, None, None
-                ] * noise / torch.sqrt(torch.sqrt(m + 1e-7))
-            else:
-                x = x_mean + torch.sqrt(step_size * 2)[
-                    :, None, None, None
-                ] * noise / torch.sqrt(torch.sqrt(m + 1e-7)) * (1 / self.beta3) * (
-                    1 / torch.sqrt(counter + 1)
-                )
+            x = x_mean + torch.sqrt(step_size * 2)[
+                :, None, None, None
+            ] * noise / torch.sqrt(torch.sqrt(V + self.lamb))
 
             counter += 1
-
-        return x, x_mean, {"m": m, "counter": counter}
+            
+            if self.debug_mode and not self.get_loss:
+                return x, x_mean, {"V": V, 
+                                "counter": counter, 
+                                "score": grad}
+            elif self.debug_mode and self.get_loss:
+                return x, x_mean, {"V": V,
+                                "counter": counter,
+                                "score": grad,
+                                "loss": self.loss_fn(self.score_fn, x)}
+            else:
+                return x, x_mean, {"V": V, "counter": counter}
 
 
 @register_corrector(name="ald")
@@ -626,7 +634,7 @@ class AnnealedLangevinDynamics(Corrector):
     We include this corrector only for completeness. It was not directly used in our paper.
     """
 
-    def __init__(self, sde, score_fn, snr, n_steps):
+    def __init__(self, sde, score_fn, snr, n_steps, extra_args=None):
         super().__init__(sde, score_fn, snr, n_steps)
         if (
             not isinstance(sde, sde_lib.VPSDE)
@@ -636,8 +644,17 @@ class AnnealedLangevinDynamics(Corrector):
             raise NotImplementedError(
                 f"SDE class {sde.__class__.__name__} not yet supported."
             )
+            
+        # parameters
+        self.beta_corr = extra_args["beta_corr"]
+        self.get_loss = extra_args["get_loss"]
+        self.loss_fn = extra_args["loss_fn"]
+        self.lamb = extra_args["lamb"]
+        self.debug_mode = extra_args['debug_mode']
+        if 'use_annealing' in extra_args.keys():
+            self.use_annealing = extra_args["use_annealing"]
 
-    def update_fn(self, x, t):
+    def update_fn(self, x, t, extra_inputs=None):
         sde = self.sde
         score_fn = self.score_fn
         n_steps = self.n_steps
@@ -940,17 +957,21 @@ def get_pc_sampler(
                 if return_all:
                     all_samples.append(inverse_scaler(x_mean if denoise else x))
                     
-                if debug_mode and predictor.__name__ == "RMSDiffusionPredictor":
+                if debug_mode and (predictor.__name__ == "RMSDiffusionPredictor"
+                                   or corrector.__name___ == "RMSLangevinCorrector"):
                     score_list.append(extra_inputs_pred["score"])
                     V_list.append(extra_inputs_pred["V"])
-                    
+                
+                # corrector for adam not implemented    
                 elif debug_mode and predictor.__name__ == "AdamDiffusionPredictor":
                     score_list.append(extra_inputs_pred["score"])
                     V_list.append(extra_inputs_pred["v"])
                     m_list.append(extra_inputs_pred["m"])
                     
-                elif debug_mode and predictor.__name__ == "ReverseDiffusionPredictor":
+                elif debug_mode and (predictor.__name__ == "ReverseDiffusionPredictor"
+                                     or corrector.__name__ == "AnnealedLangevinDynamics"):
                     score_list.append(extra_inputs_pred["score"])
+                    V_list.append(extra_inputs_pred["V"])
                     
                 if get_loss:
                     all_losses.append(extra_inputs_pred["loss"])
