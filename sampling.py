@@ -282,6 +282,8 @@ class RMSDiffusionPredictor(Predictor):
         self.debug_mode = extra_args["debug_mode"]
         self.decay_rate = extra_args["decay_rate"]
         
+        self.use_scalar_V = extra_args["use_scalar_V"]
+        
         self.get_loss = extra_args["get_loss"]
         if self.get_loss:
             self.loss_fn = extra_args["loss_fn"]
@@ -309,7 +311,10 @@ class RMSDiffusionPredictor(Predictor):
             beta_pred = self.beta_pred
 
         # update m
-        V = beta_pred * V + (1 - beta_pred) * (score**2)
+        if not self.use_scalar_V:
+            V = beta_pred * V + (1 - beta_pred) * (score**2)
+        else:
+            V = beta_pred * V + (1 - beta_pred) * torch.mean(score**2)
         
         
         correction_term = 0 if self.decay_rate == 0 else torch.exp(torch.tensor(-self.decay_rate * counter))
