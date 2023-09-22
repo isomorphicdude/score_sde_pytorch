@@ -448,7 +448,7 @@ class MongeDiffusionPredictor(Predictor):
         # print((torch.einsum('abb, ab -> ab', G_r, d_sub_term.view(batch_size, -1))).shape)
         
         x_mean = x - self.sde_lr * (d_forward_drift - \
-            torch.einsum('abb, ab -> ab', G_r, d_sub_term.view(batch_size, -1).view(x.shape)))
+            torch.einsum('abb, ab -> ab', G_r, d_sub_term.view(batch_size, -1)).view(x.shape))
 
         z = (torch.einsum('abb, ab -> ab', G_rsqrt, torch.randn_like(x).view(batch_size, -1))).view(x.shape)
         # add noise
