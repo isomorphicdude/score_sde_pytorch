@@ -461,10 +461,14 @@ class MongeDiffusionPredictor(Predictor):
         if self.debug_mode and not self.get_loss:
             return x, x_mean, {"ema_score": ema_score,
                                "counter": counter, 
+                               "G_r": G_r,
+                                "G_rsqrt": G_rsqrt,
                                "score": score}
         elif self.debug_mode and self.get_loss:
             return x, x_mean, {"ema_score": ema_score,
                                "counter": counter,
+                               "G_r": G_r,
+                               "G_rsqrt": G_rsqrt,
                                "score": score,
                                "loss": self.loss_fn(self.score_fn, x)}
         else:
