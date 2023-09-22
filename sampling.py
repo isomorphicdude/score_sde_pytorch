@@ -1077,7 +1077,8 @@ def get_pc_sampler(
                     
                 elif debug_mode and predictor.__name__ == "MongeDiffusionPredictor":
                     score_list.append(extra_inputs_pred["score"])
-                    V_list.append(extra_inputs_pred["ema_score"])
+                    V_list.append(extra_inputs_pred["G_r"])
+                    m_list.append(extra_inputs_pred["G_rsqrt"])
                     
                 elif debug_mode and (predictor.__name__ == "ReverseDiffusionPredictor"):
                     score_list.append(extra_inputs_pred["score"])
