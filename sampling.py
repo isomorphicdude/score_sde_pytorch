@@ -400,7 +400,8 @@ class MongeDiffusionPredictor(Predictor):
         if self.get_loss:
             self.loss_fn = extra_args["loss_fn"]
             
-    def get_metrics(dim, # each image has flattened dim = C x H x W
+    def get_metrics(self, 
+                    dim, # each image has flattened dim = C x H x W
                     grad, # moving average
                     alpha_2,):
         device = grad.device
