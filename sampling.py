@@ -444,11 +444,11 @@ class MongeDiffusionPredictor(Predictor):
         G_r, G_rsqrt = self.get_metrics(dim, ema_score, self.alpha_2)
         
         # no noise update
-        print(f"Forward drift shape {d_forward_drift.shape}")
-        print((torch.einsum('abb, ab -> ab', G_r, d_sub_term.view(batch_size, -1))).shape)
+        # print(f"Forward drift shape {d_forward_drift.shape}")
+        # print((torch.einsum('abb, ab -> ab', G_r, d_sub_term.view(batch_size, -1))).shape)
         
         x_mean = x - self.sde_lr * (d_forward_drift - \
-            torch.einsum('abb, ab -> ab', G_r, d_sub_term.view(batch_size, -1))).view(x.shape)
+            torch.einsum('abb, ab -> ab', G_r, d_sub_term.view(batch_size, -1).view(x.shape)))
 
         z = (torch.einsum('abb, ab -> ab', G_rsqrt, torch.randn_like(x).view(batch_size, -1))).view(x.shape)
         # add noise
