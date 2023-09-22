@@ -382,6 +382,91 @@ class RMSDiffusionPredictor(Predictor):
         return torch.sigmoid(torch.tensor(scale * (x-shift)/num_steps))
     
     
+@register_predictor(name="monge_reverse_diffusion")
+class MongeDiffusionPredictor(Predictor):
+    def __init__(self, sde, score_fn, probability_flow=False, extra_args=None):
+        super().__init__(sde, score_fn, probability_flow)
+        if extra_args is None:
+            raise ValueError("RMSDiffusionPredictor requires extra arguments.")
+
+        self.sde_lr = extra_args["sde_lr"]
+        self.lambd = extra_args["lambd"]
+        self.alpha_2 = extra_args["alpha_2"]
+        
+        self.debug_mode = extra_args["debug_mode"]
+        
+        self.get_loss = extra_args["get_loss"]
+        
+        if self.get_loss:
+            self.loss_fn = extra_args["loss_fn"]
+            
+    def get_metrics(dim, # each image has flattened dim = C x H x W
+                    grad, # moving average
+                    alpha_2,):
+        device = grad.device
+        batch_size = grad.shape[0]
+        # (64, )
+        grad_norm_2 = torch.sum((grad**2).view(batch_size, -1), 
+                            dim=-1)
+        # Construct (64, 784, 784) if MNIST
+        # Construct (64, 3072, 3072) if CIFAR10
+        G_r = torch.eye(dim, device=device) - \
+            alpha_2 / (1 + alpha_2 * grad_norm_2[:,None,None]) * \
+                torch.einsum('ab, ac -> abc', grad.view(batch_size, -1), grad.view(batch_size, -1))
+
+        G_rsqrt = (
+            torch.eye(dim, device=device)
+            + (1 / torch.sqrt(1 + alpha_2 * grad_norm_2[:,None,None]) - 1) / grad_norm_2[:,None,None] * \
+                torch.einsum('ab, ac -> abc', grad.view(batch_size, -1), grad.view(batch_size, -1))
+        )
+        return G_r, G_rsqrt
+        
+
+
+    def update_fn(self, x, t, extra_inputs=None):
+        """Returns 3 outputs for update step."""
+        
+        # the moving average of the score
+        ema_score = extra_inputs["ema_score"]
+        counter = extra_inputs["counter"]
+        
+        d_forward_drift, d_G = self.sde.discretize(x, t)
+        score = self.score_fn(x, t)
+        d_sub_term = (d_G[:, None, None, None] ** 2) * score
+        dim = np.prod(list(x.shape[1:]))
+        batch_size = x.shape[0]
+        
+        # update ema_score
+        ema_score = self.lambd * ema_score + (1 - self.lambd) * score
+
+        # construct f with preconditioning
+        G_r, G_rsqrt = self.get_metrics(dim, ema_score, self.alpha_2)
+        
+        # no noise update
+        x_mean = x - self.sde_lr * (d_forward_drift - \
+            torch.einsum('abb, ab -> ab', G_r, d_sub_term.view(batch_size, -1))).view(x.shape)
+
+        z = (torch.einsum('abb, ab -> ab', G_rsqrt, torch.randn_like(x).view(batch_size, -1))).view(x.shape)
+        # add noise
+        x = x_mean + d_G[:, None, None, None] * z * np.sqrt(self.sde_lr)
+
+        # update counter
+        counter += 1
+            
+        if self.debug_mode and not self.get_loss:
+            return x, x_mean, {"ema_score": ema_score,
+                               "counter": counter, 
+                               "score": score}
+        elif self.debug_mode and self.get_loss:
+            return x, x_mean, {"ema_score": ema_score,
+                               "counter": counter,
+                               "score": score,
+                               "loss": self.loss_fn(self.score_fn, x)}
+        else:
+            return x, x_mean, {"ema_score":ema_score, 
+                               "counter": counter}
+    
+    
 @register_predictor(name="adam_reverse_diffusion")
 class AdamDiffusionPredictor(Predictor):
     def __init__(self, sde, score_fn, probability_flow=False, extra_args=None):
@@ -951,6 +1036,10 @@ def get_pc_sampler(
                                      "counter": 0}
             # TODO: add other predictors
             
+            if predictor.__name__ == "MongeDiffusionPredictor":
+                extra_inputs_pred = {"ema_score": torch.zeros_like(x), 
+                                     "counter": 0}
+            
             if predictor.__name__ == "ReverseDiffusionPredictor" and debug_mode:
                 extra_inputs_pred = {"V": torch.zeros_like(x)}
 
@@ -976,6 +1065,10 @@ def get_pc_sampler(
                     score_list.append(extra_inputs_pred["score"])
                     V_list.append(extra_inputs_pred["v"])
                     m_list.append(extra_inputs_pred["m"])
+                    
+                elif debug_mode and predictor.__name__ == "MongeDiffusionPredictor":
+                    score_list.append(extra_inputs_pred["score"])
+                    V_list.append(extra_inputs_pred["ema_score"])
                     
                 elif debug_mode and (predictor.__name__ == "ReverseDiffusionPredictor"):
                     score_list.append(extra_inputs_pred["score"])
