@@ -226,7 +226,8 @@ class ReverseDiffusionPredictor(Predictor):
             self.scale = True
             self.debug_mode = extra_args["debug_mode"]
             self.get_loss = extra_args["get_loss"]
-            self.loss_fn = extra_args["loss_fn"]
+            if self.get_loss:
+                self.loss_fn = extra_args["loss_fn"]
             self.beta_pred = extra_args["beta_pred"]
             
 
